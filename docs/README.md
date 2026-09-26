@@ -95,9 +95,9 @@ constraints were settled.
    (`runtime.seed` and `scripts/prepare_splits.py --seed`).
 2. **Class order is positional.** `ADI, BACK, DEB, LYM, MUC, MUS, NORM, STR, TUM`
    ↔ indices `0…8`. Reordering it silently invalidates every stored metric.
-3. **One cell changes one axis.** All 13 configs must share learning rate,
+`3. **One cell changes one axis.** All 13 configs must share learning rate,
    epochs, weight decay, label smoothing, resolution, effective batch size,
-   schedule and checkpoint policy. `tests/local_selftest.py` enforces this.
+   schedule and checkpoint policy. `tests/local_selftest.py` enforces this.`
 4. **Nothing is reported before it is run.** Templates stay `pending`; results
    come from artifacts, not from memory.
 5. **Verify at the boundary you can still fix.** The codebase archive is checked
