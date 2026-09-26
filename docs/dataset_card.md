@@ -102,7 +102,7 @@ To evaluate generalization to unseen staining conditions without data leakage, t
 
 ## 4. Expected Folder Layout
 
-After downloading, extracting, and running `data/scripts/prepare_splits.py`, the repository data tree must match the following structure:
+After downloading, extracting, the repository data tree must match the following structure:
 
 ```text
 data/
