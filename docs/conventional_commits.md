@@ -4,16 +4,14 @@ This document defines the **Conventional Commits standard** enforced in the **Ro
 
 ---
 
-## 1. Specification Overview
+## 1. Specification
 
-Commit messages in this repository must follow the **Conventional Commits v1.0.0** format:
+Commit messages in this repository partly follow the **Conventional Commits v1.0.0** format:
 
 ```text
 <type>[optional scope]: <description>
 
 [optional body]
-
-[optional footer(s)]
 ```
 
 ### The Three Hard Rules
@@ -66,8 +64,7 @@ Scopes contextualize where the change occurred. Contributors should choose from 
   ```text
   feat(norm): add vahadane stain decomposition normalizer
   
-  Implements SPAMS-based sparse non-negative matrix factorization for
-  Vahadane stain separation as an alternative to SVD in Macenko.
+  Implements SPAMS-based sparse non-negative matrix factorization for Vahadane stain separation as an alternative to SVD in Macenko.
   ```
 * **Bad**: `added vahadane` *(missing type/scope, non-imperative, too vague)*
 
@@ -77,7 +74,6 @@ Scopes contextualize where the change occurred. Contributors should choose from 
   fix(checkpoint): prevent ZeroDivisionError when save_every_steps is zero
   
   Disabling step checkpoints with save_every_steps: 0 caused a modulo by zero
-  exception in should_save_step. Check that save_every_steps > 0 first.
   ```
 * **Bad**: `fixed division bug.` *(missing type, ends with period, not capitalized properly)*
 
@@ -88,7 +84,6 @@ Scopes contextualize where the change occurred. Contributors should choose from 
   
   Running Macenko SVD deconvolution on CPU during training batch iteration
   caused a 10x throughput slowdown. Caching pre-normalized tiles to disk
-  reduces epoch duration from 30m to 2m.
   ```
 * **Bad**: `perf: speed up macenko` *(missing scope, lack of explanation in body)*
 
@@ -98,31 +93,9 @@ Scopes contextualize where the change occurred. Contributors should choose from 
   fix(kaggle): handle KGAT token Bearer auth and add 429 retry backoff in download script
   
   Kaggle personal access tokens starting with KGAT_ require Bearer authorization
-  rather than Basic auth. Also added exponential backoff on HTTP 429.
   ```
 * **Bad**: `fix download script` *(missing scope, non-standard format)*
 
----
-
-### 2. Validating Commits with Git Hooks
-To catch non-compliant commit messages before they are recorded, you can create a `.git/hooks/commit-msg` hook:
-
-```bash
-#!/usr/bin/env bash
-# .git/hooks/commit-msg
-commit_regex='^(feat|fix|perf|refactor|docs|test|build|ci|chore|exp)(\([a-z0-9_-]+\))?!?: .+$'
-
-if ! grep -qE "$commit_regex" "$1"; then
-    echo "ERROR: Commit message does not follow Conventional Commits standard!"
-    echo "Format: <type>(<scope>): <subject>"
-    echo "Example: feat(norm): add macenko stain decomposition"
-    exit 1
-fi
-```
-Make the hook executable:
-```bash
-chmod +x .git/hooks/commit-msg
-```
 
 ---
 
