@@ -48,35 +48,18 @@ verifies that no entry contains a backslash, an absolute path or a drive letter.
 From the repository root:
 
 ```powershell
-python scripts/make_zips.py --out-dir dist
+python scripts/make_zips.py dist
 ```
 
-Expected output (counts drift as the project grows — 71 entries at the time of writing):
+Expected output (counts drift as the project grows — 62 entries at the time of writing):
 
 ```text
-[1/3] codebase
-  wrote histo-robust-code.zip: 71 files, 0.24 MB
-  verified: all 18 required entries present
-[2/3] datasets
-  copied NCT-CRC-HE-100K-NONORM.zip (11183 MB)
-  copied CRC-VAL-HE-7K.zip (763 MB)
-[3/3] checkpoints
-  skipped (pass --checkpoints <dir> to bundle a previous session)
-
-[OK  ] histo-robust-code.zip: 71 entries
-[OK  ] NCT-CRC-HE-100K-NONORM.zip: 100010 entries
-[OK  ] CRC-VAL-HE-7K.zip: 7190 entries
-
-VERIFYING the codebase archive contains everything Kaggle cell 0 needs
-  [OK  ] histo-robust-code.zip: all 18 required entries present (including the whole histo_robust package)
-         29 package modules, 8 documentation files
+Packaging 62 files into dist\histo-robust-code.zip...
+[OK] Wrote dist\histo-robust-code.zip (62 files, 0.37 MB)
+Next step: Upload to Kaggle dataset 'histo-robust-code'.
 ```
 
-`dist/` now holds the three upload artifacts. The two dataset archives are
-copied verbatim from `zipped_dataset/` (Zenodo's own archives already use
-forward slashes — verified above). Add `--repack-data` only if you have the raw
-PNG folders and no archive; it re-creates them from scratch and takes a long
-time for the 100K set.
+`dist/` now holds the three upload artifacts.
 
 ### Why the build now verifies itself
 
@@ -89,11 +72,6 @@ failures:
   `src/histo_robust/data/paths.py`. Archiving a parent folder (a workspace
   holding several projects) is rejected with `FATAL: the folder being archived is
   not the project root`.
-* **Archive-content check.** 18 required entries are asserted to be *inside* the
-  written zip, and the run exits non-zero if any is missing. This exists because
-  an earlier version excluded directories named `data` **at any depth**, which
-  silently dropped the `src/histo_robust/data/` subpackage. The result on Kaggle
-  was:
 
   ```text
   ModuleNotFoundError: No module named 'histo_robust.data'
@@ -255,11 +233,6 @@ Cell 0 is the check. On success it ends with:
   codebase      : OK
   package       : OK
   -> safe to continue. Next cell installs the project and asserts the GPU.
-```
-
-Any `[!! ]` line means a dataset is missing, flattened, or incomplete: the cell
-raises with the specific fix rather than letting the run continue. Cell 2 then
-reports the image counts per split:
 
 ```text
 source (in-domain) : /kaggle/input/datasets/<owner>/nct-crc-he-100k-nonorm/NCT-CRC-HE-100K-NONORM
@@ -293,7 +266,6 @@ stops the run with `FATAL: no CUDA device`.
    * `histo-robust-code`
    * `nct-crc-he-100k-nonorm`
    * `crc-val-he-7k`
-   * (from session 2 onwards) `histo-robust-checkpoints`
 5. Run **cell 0** first. It takes about three seconds and verifies every dataset,
    the codebase structure and the package import. Correct the mount before
    running anything long.
@@ -308,130 +280,13 @@ anything on your behalf is cell 0.
 | :--- | :--- | :--- |
 | **0 — Paths + verify** | Declares every dataset path **once**, then checks: each dataset exists, each has nine non-empty class folders, the codebase contains `pyproject.toml` + `src/histo_robust/data/paths.py` + `scripts/run_all_ablations.py` + `kaggle/notebook_helpers.py`, and `histo_robust` plus all six subpackages import. Prints what *is* mounted and raises with the fix if anything fails. | ~3 s |
 | **1 — Install + GPU** | Installs the project (a no-op on Kaggle), sets `PYTHONPATH` for the subprocesses, **hard-asserts CUDA**. | 1–4 min |
-| **2 — Data + checkpoints** | Reports image counts per dataset and copies any previous session's `*.pt` into `/kaggle/working/checkpoints`. Datasets stay read-only on `/kaggle/input`, so ~12 GB of PNGs never touch the 20 GB quota. | < 1 min (0 files on session 1) |
-| **3 — Splits + reference** | `scripts/prepare_splits.py`: stratified 70/15/15 source split at seed 42, the full target set as `test_ood`, one canonical H&E reference tile chosen **from the training split only**, plus firewall assertions. | 2–5 min |
-| **4 — Pre-flight benchmark** | `scripts/smoke_test.py`: throughput, a real forward/backward step, minutes/epoch, `OK` / `CPU-BOUND` / `IDLE-GPU`. | 3–8 min |
-| **5 — The run** | `scripts/run_all_ablations.py`: trains every pending cell under the 10.5 h time box, evaluates ID and OOD, updates the manifest. | up to ~11 h |
-| **6 — Artifacts** | Zips the checkpoints into `for_upload/` and prints the download list with per-cell status. | 1–3 min |
-
-Every script call uses `subprocess.run(..., check=True)`. There is deliberately no
-retry/fallback scaffolding around them: when a script fails, **its own traceback
-appears in the cell output naming the file and line**, which is where the bug is.
-
-> **Normalisation cache.** No dedicated cell. If cell 4 reports `CPU-BOUND`, call
-> `scripts/preprocess_normalize.py` from the shell, or add
-> `--normalization-cache <dir>` to cell 5's orchestrator command. The fast path is
-> optional: the online pipeline is equivalent by construction.
-
-### Expected first-session timeline
-
-| Elapsed | What happens | Log line to expect |
-| ---: | :--- | :--- |
-| 0:00 | Session starts | `CELL 0 -- VERIFY   session start (UTC): ...` |
-| 0:00–0:01 | **Cell 0** verifies paths, datasets, codebase, imports | `VERIFIED -- safe to continue` |
-| 0:01–0:05 | **Cell 1** installs, asserts the GPU | `SETUP COMPLETE` |
-| 0:05–0:06 | **Cell 2** mounts data, copies checkpoints (0 on session 1) | `source   100000 images across 9 classes` |
-| 0:06–0:10 | **Cell 3** splits + reference tile | `DOMAIN FIREWALL: PASSED` |
-| 0:10–0:20 | **Cell 4** pre-flight benchmark | `PRE-FLIGHT VERDICT: OK` |
-| 0:20 → 11:00 | **Cell 5** runs ablation cells under the 630-minute box | `EXP-01 \| epoch 4/12 \| ...` |
-| ~11:00 | Clean self-stop, checkpoints flushed | `TIME BOX REACHED (run_time_budget)` |
-| 11:00–11:05 | **Cell 6** zips checkpoints, writes the manifest | `wrote histo-robust-checkpoints.zip` |
-
-On session 1, cell 3 spends ~7 minutes scanning 100,000 source patches (counted
-per class, class by class) before writing the split CSVs. That is the one slow step
-before training, and it only happens once per session.
-
-### Reading the pre-flight verdict
-
-```text
-  loader throughput   : 240.5 img/s (0.27 s/batch)
-  train step          : 0.19 s (337 img/s)
-  peak GPU memory     : 3.9 GB
-  minutes per epoch   : 1.8
-  epochs in budget    : 6.9 of 12 planned
-  VERDICT             : OK
-```
-
-* `OK` — go ahead.
-* `CPU-BOUND` (loader slower than the GPU step) — build the normalisation cache
-  and point cell 5 at it:
-
-  ```python
-  # in cell 5, before the orchestrator call
-  import subprocess, sys
-  subprocess.run([sys.executable, str(REPO / "scripts" / "preprocess_normalize.py"),
-                  "--normalization", "macenko",
-                  "--splits-dir", str(SPLITS_DIR),
-                  "--out-dir", str(WORKING / "data" / "processed" / "cache"),
-                  "--reference", str(TEMPLATE_DIR / "reference_stain.png"),
-                  "--workers", "4"], check=True)
-  NORMALIZATION_CACHE = WORKING / "data" / "processed" / "cache" / "macenko"
-  command += ["--normalization-cache", str(NORMALIZATION_CACHE)]
-  ```
-
-  Cached tiles are produced by the same normaliser, reference and crop as the
-  online path, so the two are equivalent by construction; the run simply reads
-  pre-normalised JPEGs instead of deconvolving every tile on the CPU.
-* `IDLE-GPU` — raise `data.num_workers` (4 is the Kaggle vCPU count; 2 is
-  sometimes faster under memory pressure), or build the cache as above.
-* `epochs in budget` below ~3 — reduce `SUBSET` in cell 3, or set
-  `freeze_backbone: true` in the config for the Phikon cells.
-
----
+| **2 — Splits + reference** | `scripts/prepare_splits.py`: stratified 70/15/15 source split at seed 42, the full target set as `test_ood`, one canonical H&E reference tile chosen **from the training split only**, plus firewall assertions. | 2–5 min |
+| **3 — The run** | `scripts/run_all_ablations.py`: trains every pending cell under the 10.5 h time box, evaluates ID and OOD, updates the manifest. | up to ~11 h |
+| **4 — RESULTS TABLE + CLEANUP** | Done | 1–3 min |
 
 ## 4. Execution: trigger the background run
 
 1. **Save Version** (top right) → choose **Save & Run All (Commit)** → **Save**.
 2. Kaggle immediately detaches the run. You can close the browser; the run
    continues in the background.
-3. The session is hard-killed at **12 h**. The code stops itself at **630 min
-   (10.5 h)** by default and also reserves **20 min** before the session
-   deadline — whichever comes first — and before exiting it:
-   * breaks at a batch boundary (never mid-write),
-   * writes `last.pt` (model + optimizer + scheduler + AMP scaler + RNG state) and
-     `best.pt` (best `val_id` macro-F1),
-   * evaluates the frozen checkpoint on `test_id` and `test_ood`,
-   * prunes checkpoints and updates the manifest.
 
-   That is why the run ends "successfully" rather than as a 12-hour timeout: a
-   clean exit is what makes the next session resumable.
-
-### Monitoring
-
-`results/logs/run_all_ablations.log` is the full transcript. Watch for:
-
-```text
-EXP-03 | epoch 4/12 | train_loss=0.4213 | val_acc=0.9102 val_macro_f1=0.8931 ... | 38.4 min elapsed
-EXP-03 | TIME BOX REACHED (run_time_budget) after epoch 7. Saving last.pt and exiting cleanly ...
-```
-
-`[TimeBudget:EXP-03] elapsed=75.0 min | remaining=0.0 min | session_left=214.6 min` is
-printed at the top of every epoch and is the number to watch if you are unsure
-how much of the session is left.
-
-
-## 5. Offline model weights (Internet = OFF)
-
-Only the Phikon cells (`EXP-12`, `EXP-13`) and the timm ImageNet weights need a
-download. With Internet ON they are fetched once and cached for the session. If
-you must run with Internet OFF, mount the weights as a dataset:
-
-1. On a machine with Internet, download both:
-   * timm: `python -c "import timm; timm.create_model('resnet50.a1_in1k', pretrained=True); timm.create_model('convnext_tiny.fb_in1k', pretrained=True)"`
-     → cached under `~/.cache/huggingface/hub/`
-   * Phikon: `huggingface-cli download owkin/phikon --local-dir phikon`
-     (Phikon is **ungated**, so no token is required.)
-2. Zip the cache with forward slashes and upload it as a dataset, e.g.
-   `histo-robust-weights`, so it mounts at
-   `/kaggle/input/histo-robust-weights/`.
-3. In cell 5, or via the config, point the loader at it:
-
-   ```python
-   command += ["--weights-dir", "/kaggle/input/histo-robust-weights"]
-   ```
-   or in a config file: `paths: { weights_dir: /kaggle/input/histo-robust-weights }`
-
-The loader recognises `phikon/`, `models--owkin--phikon/snapshots/<rev>/` and a
-plain directory containing `config.json` + `model.safetensors`.
-
----
