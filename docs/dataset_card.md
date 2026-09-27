@@ -1,9 +1,5 @@
 # Dataset Card: Colorectal Cancer Tissue Classification (NCT-CRC-HE-100K-NONORM & CRC-VAL-HE-7K)
 
-> `docs/` index: [`README.md`](README.md) · plan: [`PLAN.md`](PLAN.md) · procedure:
-> [`kaggle_guide.md`](kaggle_guide.md) · run register: [`RUN_LOG.md`](RUN_LOG.md) ·
-> results: [`RESULTS.md`](RESULTS.md) · reference: [`APPENDICES.md`](APPENDICES.md)
-
 ## 1. Dataset Overview
 
 This project investigates model robustness to histopathological staining variations using two paired, publicly available benchmark datasets of Hematoxylin and Eosin (H&E) stained colorectal tissue patches:
@@ -19,7 +15,7 @@ Both datasets share identical image dimensions, spatial resolution, and class de
 | **Patch Resolution** | 224 x 224 pixels | 224 x 224 pixels |
 | **Microns Per Pixel (MPP)** | 0.50 µm/px (approx. 20x magnification) | 0.50 µm/px (approx. 20x magnification) |
 | **Staining Protocol** | Routine clinical H&E (raw, unnormalized) | Routine clinical H&E (external laboratory protocol) |
-| **Download link** | [10.5281/zenodo.1214456](https://doi.org/10.5281/zenodo.1214456)![NCT-100K](../playground/images/NCT-100k.png) | [10.5281/zenodo.1214456](https://doi.org/10.5281/zenodo.1214456)![CRC-7k](../playground/images/CRC-7k.png) |
+| **Download link** | [10.5281/zenodo.1214456](https://doi.org/10.5281/zenodo.1214456)![NCT-100K](./images/NCT-100k.png) | [10.5281/zenodo.1214456](https://doi.org/10.5281/zenodo.1214456)![CRC-7k](./images/CRC-7k.png) |
 
 ---
 
@@ -131,7 +127,7 @@ data/
 │       ├── NORM/
 │       ├── STR/
 │       └── TUM/
-└── processed/
+└── processed/          # downloaded form the kaggle training output result session
     └── splits/
     │   ├── train.csv
     │   ├── val_id.csv
