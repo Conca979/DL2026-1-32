@@ -16,7 +16,9 @@ This document tracks the empirical findings of the **13-cell ablation study** ev
 ## 2. Master Results Table (13-Cell Matrix)
 
 > [!NOTE]
-> Tthe table below reflects the experimental schema, template executed by `run_experiments.py`. Final empirical numbers will be pasted on `results/RESULTS_TABLE.md` and `results/summary_results.csv` after the run.
+> The table below holds the final results of the completed 13-cell run, produced by `run_experiments.py` and mirrored from `results/RESULTS_TABLE.md` and `results/summary_results.csv`.
+>
+> Each cell is a **single run**. The pipeline does not fix `torch.manual_seed`, so weight initialization, data-loader shuffle order, and augmentation draws differ between runs. Differences below ~1 F1 point should not be over-interpreted; see the Limitations section of the report.
 
 # Final Ablation Results
 
@@ -36,6 +38,45 @@ This document tracks the empirical findings of the **13-cell ablation study** ev
 | EXP-12   | Stage 4 | phikon        | none     | none         |        0.9915 |       0.9912 |        0.8239 |     0.1673 |   83.12 |        0.9912 |         0.8623 |      9.08 |
 | EXP-13   | Stage 4 | phikon        | macenko  | aug_combined |        0.9018 |       0.905  |        0.6982 |     0.2068 |   77.15 |        0.9045 |         0.7398 |     20.11 |
 
+
+### Column Reference
+
+Every column is written by `train_experiment()` in `run_experiments.py` (result dict, L507–L521) and appears identically in `results/summary_results.csv` and `results/RESULTS_TABLE.md`. Rounding: F1 and accuracy to 4 decimals; `rr_f1` and `minutes` to 2.
+
+#### Identity columns — describe the run, not the result
+
+| Column | Values | Meaning |
+| :--- | :--- | :--- |
+| `exp_id` | `EXP-01` … `EXP-13` | Stable join key across this document, `summary_results.csv`, and `docs/PLAN.md`. Copied verbatim from the `EXPERIMENTS` matrix. |
+| `stage` | `Stage 0` … `Stage 4` | Reporting group only — **not** used for control flow; all 13 cells execute the identical pipeline. Stage 0 = anchor baseline, 1 = normalization, 2 = augmentation, 3 = normalization × augmentation interaction, 4 = backbones & foundation models. |
+| `backbone` | `resnet50`, `convnext_tiny`, `phikon` | `resnet50` = timm `resnet50.a1_in1k`; `convnext_tiny` = timm `convnext_tiny.fb_in1k` (both ImageNet-pretrained, fully fine-tuned); `phikon` = Owkin ViT-B/16 pretrained on ~43M TCGA tiles via iBOT, used as a **frozen encoder with a linear probe** — only 6,921 of ~86M parameters are trainable. |
+| `norm` | `none`, `reinhard`, `macenko` | Stain normalization applied to **both** training and evaluation tiles. The reference tile is fixed across all 13 cells (first `TUM` patch of the training split), and the normalizer is fitted once per experiment. |
+| `aug` | `none`, `aug_geo`, `aug_stain`, `aug_combined` | Training-time augmentation policy. **Applies to the training split only** — every evaluation set is transformed with `policy="none"`, so this column never changes how test tiles are processed. |
+
+#### Metric columns
+
+| Column | Definition | Range | Better |
+| :--- | :--- | :---: | :---: |
+| `best_val_f1` | Highest macro-F1 reached on the in-domain **validation** split (3,749 tiles) during the 8 epochs. This is the **model-selection criterion** — the checkpoint with the best value here is the one later evaluated on both test sets. | 0–1 | higher |
+| `test_id_f1` | **Macro-averaged F1 on the in-domain test split** (`test_id`, 3,749 held-out source tiles). All 9 classes weighted equally regardless of frequency. This is the model's ceiling: performance when stain conditions match training. | 0–1 | higher |
+| `test_ood_f1` | **Macro-averaged F1 on the out-of-domain target set** (`test_ood`, all 7,180 CRC-VAL-HE-7K tiles, 50 unseen patients, different institution). The study's headline metric. | 0–1 | higher |
+| `delta_f1` | `test_id_f1 − test_ood_f1`, the **Stain Drop**. Absolute loss of F1 attributable to the stain/domain shift. | −1 … 1 | **lower** (0 = perfect invariance) |
+| `rr_f1` | `(test_ood_f1 / test_id_f1) × 100`, the **Retention Rate**. Percentage of in-domain diagnostic power preserved across institutions. | 0–100 (%) | **higher** (100% = full retention) |
+| `test_id_acc` | Plain top-1 accuracy on `test_id`. | 0–1 | higher |
+| `test_ood_acc` | Plain top-1 accuracy on `test_ood`. | 0–1 | higher |
+| `minutes` | Wall-clock training time per experiment, measured from just before epoch 1 to just after the OOD evaluation. **Includes** the 8 validation passes and both test evaluations; **excludes** split preparation and the one-time pretrained-weights download. | ≥ 0 | — |
+
+#### Notes on interpretation
+
+- **`delta_f1` alone can mislead.** It is an *absolute* difference, so it is sensitive to the in-domain ceiling. A model that is simply weaker in-domain can post a smaller drop without being more robust. Always read it next to `rr_f1`, which normalizes by `test_id_f1` and is the fairer cross-model comparison.
+- **Accuracy columns are the weakest evidence in the table.** The class distribution is imbalanced in the target domain (`ADI` 1,338 vs `DEB` 339), so plain accuracy flatters models that do well on majority classes. They are kept for legibility to a non-specialist audience; macro-F1 is the primary metric for every claim. Expect `test_id_acc` to sit within ~0.002 of `test_id_f1` (in-domain the classes are near-balanced by stratification) but `test_ood_acc` to diverge more.
+- **`minutes` is a real experimental signal, not just bookkeeping.** Normalization costs wall-clock because Macenko/Reinhard add per-tile NumPy work: unnormalized cells run ~11–13 min, Reinhard ~16.5 min, Macenko ~17–21 min. Phikon is the fastest cell in the study (9.08 min) *because* its encoder is frozen and only the linear head receives gradients.
+- **`best_val_f1` is not a test metric.** It is a development metric used for checkpoint selection; comparing it to `test_id_f1` is a useful sanity check (they should be close), but neither should be reported as a result.
+
+#### What the table does *not* contain
+
+- **`balanced_acc` and `auroc` are computed but discarded.** `evaluate_model()` returns four metrics (L424), but only macro-F1 and accuracy are propagated into the result dict (L507–L521). Both are therefore computed on all 10 evaluations per experiment and then thrown away — they are not recoverable from any artifact.
+- **No per-class metrics and no confusion matrices.** The pipeline emits aggregate scalars only. Diagnosing *which* tissue classes drive a given `delta_f1` — e.g. whether `STR`/`MUS` confusion or background-heavy classes dominate — requires the error-analysis pass that is not yet implemented.
 
 ### Legend
 - **Aug-Geo**: Spatial geometric invariance (random horizontal/vertical flips, 90° rotations).
@@ -83,15 +124,17 @@ This document tracks the empirical findings of the **13-cell ablation study** ev
 | Class Code | Tissue Description | Out-of-Domain Count (`CRC-VAL-HE-7K`) | Clinical Diagnostic Role |
 | :--- | :--- | :---: | :--- |
 | `ADI` | Adipose | 1,338 | Background fatty tissue; high fat vacuoles. |
-| `BACK` | Background | 1,056 | Glass slide / mounting medium; pure optical transmission. |
+| `BACK` | Background | 847 | Glass slide / mounting medium; pure optical transmission. |
 | `DEB` | Debris | 339 | Necrosis, hemorrhages; high morphological variation. |
-| `LYM` | Lymphocytes | 638 | Immune infiltration; dark hyperchromatic round nuclei. |
-| `MUC` | Mucus | 617 | Extracellular mucin pools; faint amphophilic staining. |
+| `LYM` | Lymphocytes | 634 | Immune infiltration; dark hyperchromatic round nuclei. |
+| `MUC` | Mucus | 1,035 | Extracellular mucin pools; faint amphophilic staining. |
 | `MUS` | Smooth Muscle | 592 | Colonic muscularis propria; eosinophilic fiber bundles. |
-| `NORM` | Normal Mucosa | 876 | Non-neoplastic colon crypts with goblet cells. |
+| `NORM` | Normal Mucosa | 741 | Non-neoplastic colon crypts with goblet cells. |
 | `STR` | Stroma | 421 | Desmoplastic cancer-associated stroma. |
-| `TUM` | Colorectal Carcinoma | 1,303 | Primary tumor epithelium; dysplastic glandular architecture. |
+| `TUM` | Colorectal Carcinoma | 1,233 | Primary tumor epithelium; dysplastic glandular architecture. |
 | **Total** | | **7,180** | **50 Independent Patients** |
+
+*Counts verified directly from `results/splits/test_ood.csv` — the exact file used in the experiments — not from upstream documentation.*
 
 ---
 
@@ -101,4 +144,4 @@ When `notebook.ipynb` finishes executing on Kaggle:
 1. Open the **Output** tab in the Kaggle notebook.
 2. Locate `/kaggle/working/results/RESULTS_TABLE.md`.
 3. Copy the populated Markdown table into Section 2 of this file.
-4. Download `/kaggle/working/results/summary_results.csv` into `results/` for downstream plotting or statistical analysis.
+4. Download `/kaggle/working/results/RESULTS_TABLE.md` into `results/` for downstream plotting or statistical analysis.
