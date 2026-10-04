@@ -30,23 +30,19 @@ A clean, reproducible 13-cell ablation study evaluating what makes deep learning
 ## Quickstart
 
 ### 1. Kaggle Execution (1 Click)
-All 13 experiments train in **~3.5 hours** on a single Kaggle GPU P100:
+All 13 experiments train in **~3.5 hours** on kaggle free 2 GPUs T4:
 1. Upload [`notebook.ipynb`](notebook.ipynb) to Kaggle via **File -> Import Notebook**.
 2. Set **Accelerator** and **Internet**: `On`.
 3. Attach the two dataset and codebase inputs (`nct-crc-he-100k-nonorm`, `crc-val-he-7k` and `histo-robust-code`).
 4. Click **Run All** (or **Save & Run All**).
 5. The final markdown table is automatically exported to `results/RESULTS_TABLE.md`.
 
-### 2. Local Verification (< 1 second)
+### 2. Build Kaggle Code Zip (see docs/kaggle_guide.md)
 ```bash
-uv run python tests/run_all.py          # Verifies pipeline, normalization, and transforms
-uv run python run_experiments.py --dry-run   # Prints execution plan
+python scripts/make_zips.py      # Produces dist/histo-robust-code.zip
 ```
 
-### 3. Build Kaggle Code Zip (Suggest read more on docs/KAGGLE_GUIDE.md)
-```bash
-uv run python scripts/make_zips.py      # Produces dist/histo-robust-code.zip (7.2 KB)
-```
+Dataset download, split protocol, preprocessing, and the exact reproduction command are documented in [`DATA.md`](DATA.md).
 
 ---
 
@@ -54,17 +50,24 @@ uv run python scripts/make_zips.py      # Produces dist/histo-robust-code.zip (7
 
 ```text
 ├── README.md               # 1-page project overview & 13-cell matrix
-├── run_experiments.py      # Complete standalone training & evaluation pipeline (~500 lines)
-├── notebook.ipynb          # 5-cell Kaggle execution notebook
-├── pyproject.toml          # Minimal environment dependencies (managed by uv)
-├── docs/                   # Scientific documentation (exactly 4 files)
+├── DATA.md                 # Datasets, split protocol, preprocessing, repro commands
+│
+├── run_experiments.py      # Complete standalone training & evaluation pipeline
+├── notebook.ipynb          # Kaggle execution notebook
+│
+├── results/                # Committed run artifacts
+│   ├── summary_results.csv # 13-cell metrics table
+│   ├── RESULTS_TABLE.md    # Same table in Markdown
+│   └── splits/             # train / val_id / test_id / test_ood CSVs + reference_stain.png
+│
+├── docs/                   # Scientific documentation
 │   ├── PLAN.md             # Research problem, 13-cell matrix & evaluation math
-│   ├── RESULTS.md          # 13-cell master results tracking table & hypotheses
+│   ├── RESULTS.md          # 13-cell master results tracking table
+│   ├── CODE_WALKTHROUGH.md # Line-by-line explanation of the pipeline
 │   ├── dataset_card.md     # 9 classes, split rules, and domain firewall
-│   └── kaggle_guide.md     # 1-click execution guide for Kaggle GPU
-├── scripts/
-│   └── make_zips.py        # Kaggle archive packager (packs only run_experiments.py)
-└── tests/
-    ├── test_pipeline.py    # Offline unit tests
-    └── run_all.py          # Instant test runner
+│   ├── kaggle_guide.md     # 1-click execution guide for Kaggle GPU
+│   └── exam_requirement.md # Course rubric
+│
+└── scripts/
+    └── make_zips.py        # Kaggle archive packager (packs only run_experiments.py)
 ```
