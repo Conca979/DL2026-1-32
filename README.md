@@ -1,9 +1,26 @@
 # Robust Histopathology Image Classification under Staining Variations
 
-A clean, reproducible 13-cell ablation study evaluating what makes deep learning classifiers robust to clinical histopathology staining variations.
+**DL2026 — Group 1 · Project 32**
 
-* **In-Domain (Source)**: `NCT-CRC-HE-100K-NONORM` (100,000 raw unnormalized H&E colorectal cancer tiles, Heidelberg/Mannheim).
-* **Out-of-Domain (Target)**: `CRC-VAL-HE-7K` (7,180 tiles from 50 independent patients at RWTH Aachen; strictly firewall-protected).
+A 13-cell ablation study measuring what actually makes deep learning classifiers robust to clinical histopathology staining variation: color normalization, data augmentation, and pretrained backbone choice.
+
+* **In-Domain (Source)**: `NCT-CRC-HE-100K-NONORM` — 100,000 raw, unnormalized H&E colorectal cancer tiles (Heidelberg / Mannheim).
+* **Out-of-Domain (Target)**: `CRC-VAL-HE-7K` — 7,180 tiles from 50 independent patients at RWTH Aachen, strictly firewall-protected.
+
+---
+
+## Headline Results
+
+Macro-F1 on the held-out in-domain test split (`ID`) and the external hospital cohort (`OOD`). `Δ-F1 = ID − OOD` (lower is better); `RR = OOD / ID` (higher is better).
+
+| Configuration | Cell | ID F1 | OOD F1 | Δ-F1 | RR |
+| :--- | :---: | ---: | ---: | ---: | ---: |
+| Raw baseline (ResNet-50) | EXP-01 | 0.9893 | 0.6644 | 0.3249 | 67.2% |
+| Best overall (ResNet-50, Macenko + geometric aug) | EXP-07 | 0.9717 | **0.8689** | **0.1028** | **89.4%** |
+| Best foundation model (Phikon, undefended) | EXP-12 | 0.9912 | 0.8239 | 0.1673 | 83.1% |
+| Phikon + full defense | EXP-13 | 0.9050 | 0.6982 | 0.2068 | 77.2% |
+
+Three findings drive the study: stain normalization recovers most of the lost robustness (+18 F1 points), augmentation is largely **redundant once normalization is applied**, and a frozen histology foundation encoder — the strongest single model when undefended — is the one configuration that defenses **actively break**. Full numbers in [`results/summary_results.csv`](results/summary_results.csv).
 
 ---
 
@@ -27,47 +44,77 @@ A clean, reproducible 13-cell ablation study evaluating what makes deep learning
 
 ---
 
-## Quickstart
+## Environment
 
-### 1. Kaggle Execution (1 Click)
-All 13 experiments train in **~3.5 hours** on kaggle free 2 GPUs T4:
-1. Upload [`notebook.ipynb`](notebook.ipynb) to Kaggle via **File -> Import Notebook**.
-2. Set **Accelerator** and **Internet**: `On`.
-3. Attach the two dataset and codebase inputs (`nct-crc-he-100k-nonorm`, `crc-val-he-7k` and `histo-robust-code`).
-4. Click **Run All** (or **Save & Run All**).
-5. The final markdown table is automatically exported to `results/RESULTS_TABLE.md`.
+The project runs entirely on **Kaggle**; there is no local execution path.
 
-### 2. Build Kaggle Code Zip (see docs/kaggle_guide.md)
+| Requirement | Value |
+| :--- | :--- |
+| **Accelerator** | GPU `T4 x2` |
+| **Internet** | **On** — required to fetch ImageNet weights (`timm`) and `owkin/phikon` (`transformers`) |
+| **Python / PyTorch** | 3.10+ / 2.x, as supplied by the Kaggle image |
+| **Provided by the Kaggle image** | `torch`, `torchvision`, `pandas`, `numpy`, `scikit-learn`, `Pillow` |
+| **Installed by the notebook** | `timm`, `transformers`, `tabulate` — `notebook.ipynb` Cell 1 |
+
+No dependency manifest is committed: the only packages that need installing are the three above, and the notebook installs them automatically.
+
+---
+
+## Reproducing the Main Results (read on docs/kaggle_guide.md for more information)
+
+**1. Build the code archive**
+
 ```bash
-python scripts/make_zips.py      # Produces dist/histo-robust-code.zip
+python scripts/make_zips.py      # → dist/histo-robust-code.zip (contains run_experiments.py only)
 ```
 
-Dataset download, split protocol, preprocessing, and the exact reproduction command are documented in [`DATA.md`](DATA.md).
+**2. Upload it to Kaggle** as a dataset named `histo-robust-code` (Private visibility is fine).
+
+**3. Attach three inputs** to a new Kaggle notebook, under **Add Input → Your Datasets**:
+
+| Dataset | Role |
+| :--- | :--- |
+| `histo-robust-code` | the pipeline script built in step 1 |
+| `nct-crc-he-100k-nonorm` | in-domain source patches |
+| `crc-val-he-7k` | out-of-domain target patches |
+
+**4. Import and run** [`notebook.ipynb`](notebook.ipynb) via **File → Import Notebook**, then **Run All**. The five cells install dependencies, stage the script into `/kaggle/working`, run all 13 experiments sequentially with live logs, and render the final table. Expect **~3.5 hours** on a single P100.
+
+**5. Collect the artifacts** from the notebook's **Output** tab, under `results/`:
+
+- `RESULTS_TABLE.md` — the formatted 13-cell table
+- `summary_results.csv` — the same numbers, machine-readable
+- `splits/` — the four split CSVs and the canonical stain reference tile
+
+The notebook reproduces the table in this README and in [`docs/RESULTS.md`](docs/RESULTS.md).
+
+**Data details** — official dataset URL and version, class definitions, the 70/15/15 split protocol, the domain firewall, and every preprocessing step — are documented in [`DATA.md`](DATA.md). A click-by-click version of the steps above is in [`docs/kaggle_guide.md`](docs/kaggle_guide.md).
 
 ---
 
 ## Repository Structure
 
 ```text
-├── README.md               # 1-page project overview & 13-cell matrix
-├── DATA.md                 # Datasets, split protocol, preprocessing, repro commands
+├── README.md                    # this file
+├── DATA.md                      # dataset source, version, split protocol, preprocessing
+├── run_experiments.py           # the complete pipeline (data prep → train → evaluate)
+├── notebook.ipynb               # Kaggle execution notebook
 │
-├── run_experiments.py      # Complete standalone training & evaluation pipeline
-├── notebook.ipynb          # Kaggle execution notebook
+├── results/                     # committed run artifacts
+│   ├── summary_results.csv      # 13-cell metrics table (machine-readable)
+│   ├── RESULTS_TABLE.md         # the same table in Markdown
+│   └── splits/                  # train / val_id / test_id / test_ood splits
+│                                #   + reference_stain.png (canonical stain reference)
 │
-├── results/                # Committed run artifacts
-│   ├── summary_results.csv # 13-cell metrics table
-│   ├── RESULTS_TABLE.md    # Same table in Markdown
-│   └── splits/             # train / val_id / test_id / test_ood CSVs + reference_stain.png
-│
-├── docs/                   # Scientific documentation
-│   ├── PLAN.md             # Research problem, 13-cell matrix & evaluation math
-│   ├── RESULTS.md          # 13-cell master results tracking table
-│   ├── CODE_WALKTHROUGH.md # Line-by-line explanation of the pipeline
-│   ├── dataset_card.md     # 9 classes, split rules, and domain firewall
-│   ├── kaggle_guide.md     # 1-click execution guide for Kaggle GPU
-│   └── exam_requirement.md # Course rubric
+├── docs/
+│   ├── README.md                # documentation index
+│   ├── PLAN.md                  # research design, 13-cell matrix, evaluation math
+│   ├── RESULTS.md               # results table + per-column reference
+│   ├── CODE_WALKTHROUGH.md      # line-by-line explanation of the pipeline
+│   ├── dataset_card.md          # 9 classes, split rules, domain firewall
+│   ├── kaggle_guide.md          # step-by-step Kaggle execution guide
+│   └── exam_requirement.md      # course rubric
 │
 └── scripts/
-    └── make_zips.py        # Kaggle archive packager (packs only run_experiments.py)
+    └── make_zips.py             # packages run_experiments.py for the Kaggle dataset
 ```
