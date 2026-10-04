@@ -61,13 +61,13 @@ Holding the backbone (`ResNet-50`) and normalization (`None`) fixed, compare inv
 
 ### Axis D: Normalization x Augmentation Interaction
 Evaluate whether explicit color normalization and stochastic stain augmentation are complementary or redundant:
-- Combine the top-performing normalization method (Macenko) with each augmentation policy (`Aug-Geo`, `Aug-Stain`, `Aug-Combined`).
+- Combine the *expected* strongest normalization method (Macenko) with each augmentation policy (`Aug-Geo`, `Aug-Stain`, `Aug-Combined`). Stage 3 was designed on the assumption that Macenko would outperform Reinhard; the completed run contradicted that assumption — which is itself a reported finding (see `docs/RESULTS.md`).
 
 ---
 
 ### Staged Ablation Matrix
 
-The 11 experiments below provide direct, controlled comparisons where each variable is isolated against the baseline.
+The 13 experiments below provide direct, controlled comparisons where each variable is isolated against the baseline. Stage 4 extends beyond the original 11-cell design with a histology-specific foundation model (Phikon), contrasted against the ImageNet-pretrained backbones.
 
 | Exp ID | Stage | Backbone | Weights Source | Normalization | Augmentation Policy | Primary Research Question Addressed | Comparator / Baseline |
 | :---: | :---: | :---: | :---: | :---: | :---: | :--- | :---: |
@@ -82,6 +82,8 @@ The 11 experiments below provide direct, controlled comparisons where each varia
 | **EXP-09** | Stage 3 | ResNet-50 | ImageNet-1k | Macenko | Aug-Combined | **Defended ResNet Baseline**: Peak performance of ResNet under full defense. | vs. EXP-01, EXP-06 |
 | **EXP-10** | Stage 4 | ConvNeXt-T | ImageNet-1k | None | None | Is modern ConvNet architecture intrinsically more robust to stain shift than ResNet? | vs. EXP-01 |
 | **EXP-11** | Stage 4 | ConvNeXt-T | ImageNet-1k | Macenko | Aug-Combined | Does ConvNeXt-Tiny benefit from the combined normalization/augmentation policy? | vs. EXP-09, EXP-10 |
+| **EXP-12** | Stage 4 | Phikon (ViT-B/16) | TCGA, iBOT SSL | None | None | Does large-scale histology self-supervised pretraining provide intrinsic stain invariance? | vs. EXP-01, EXP-10 |
+| **EXP-13** | Stage 4 | Phikon (ViT-B/16) | TCGA, iBOT SSL | Macenko | Aug-Combined | Can a frozen foundation-model encoder benefit from the combined defense policy? | vs. EXP-12, EXP-11 |
 
 ---
 
@@ -93,7 +95,7 @@ To strictly avoid data leakage and prevent optimistic bias:
 - **Source Domain (`NCT-CRC-HE-100K-NONORM`)**:
   - Partitioned into **Train (70%)**, **In-Domain Validation (`Val-ID`, 15%)**, and **In-Domain Test (`Test-ID`, 15%)**.
   - Partitioning is stratified across the 9 classes with a fixed random seed (`seed = 42`).
-  - **Val-ID** is used exclusively for learning rate scheduling, early stopping, and selecting the optimal checkpoint (`best_checkpoint.pt`).
+  - **Val-ID** is used exclusively for checkpoint selection: the model is scored on Val-ID after every epoch, and the weights achieving the best macro-F1 are retained for the final evaluation.
   - **Test-ID** is evaluated once at the end of training to measure in-domain performance.
 - **Target Domain (`CRC-VAL-HE-7K`)**:
   - 100% of the 7,180 patches from 50 independent Aachen patients form the **Out-of-Domain Test (`Test-OOD`)**.
@@ -108,12 +110,15 @@ Because medical test sets often exhibit natural class imbalances (in `CRC-VAL-HE
    - Treats all tissue types equally, directly penalizing models that misclassify clinically critical minority classes.
 2. **Secondary Metric 1**: **Balanced Accuracy (`Bal-Acc`)**
    - Arithmetic mean of recall across all 9 classes (equivalent to macro-averaged sensitivity).
+   - *Reporting status: computed on every evaluation, but never propagated to the results table.*
 3. **Secondary Metric 2**: **Overall Top-1 Accuracy (`Acc`)**
-   - Standard benchmark metric for comparison with existing literature.
+   - Standard benchmark metric for comparison with existing literature. Reported for both test splits.
 4. **Secondary Metric 3**: **Macro One-vs-Rest AUROC (`Macro-AUROC`)**
    - Evaluates the ranking quality of predicted softmax probabilities across classes.
-5. **Per-Class Analysis**:
-   - Complete 9x9 confusion matrices (normalized by true class rows) saved as CSV and heatmap plots to diagnose specific tissue confusions (e.g., `STR` vs. `MUS`).
+   - *Reporting status: computed on every evaluation, but never propagated to the results table.*
+5. **Per-Class Analysis** — **not yet implemented**:
+   - 9x9 confusion matrices (normalized by true class rows) and per-class precision/recall would diagnose specific tissue confusions (e.g. `STR` vs. `MUS`).
+   - The shipped pipeline emits aggregate scalars only; producing these artifacts requires the error-analysis pass described in §5.
 
 ### 3. Robustness Quantification
 
@@ -132,96 +137,39 @@ Robustness to staining variations is explicitly quantified via two primary mathe
 
 ---
 
-## 6. Repository Structure
+## 5. Repository Structure
 
-The project is a standalone repository: everything below lives at the repository
-root, and the codebase zip handed to Kaggle is built from this root (verified by
-`scripts/make_zips.py`).
+The delivered implementation is deliberately compact: data preparation, stain
+normalization, augmentation, training, and evaluation all live in a **single
+standalone script**, `run_experiments.py`. The modular `src/histo_robust/` package
+layout and the `configs/*.yaml` experiment registry described in earlier drafts of
+this plan were **never built**; this section documents what actually ships.
 
 ```text
 <repo root>/
-├── README.md
-├── pyproject.toml            # package + extras (train / normalize / dev / all)
-├── uv.lock                   # pinned local environment
-├── .python-version           # 3.10
-├── docs/                     # 4 core documents (index: docs/README.md)
-│   ├── README.md
-│   ├── PLAN.md
-│   ├── dataset_card.md
-│   └── kaggle_guide.md
-├── kaggle/                   # single unified notebook
-│   └── notebook_01_run_all_ablations.ipynb
-├── configs/
-│   ├── base_config.yaml
-│   ├── experiments_registry.json
-│   └── experiments/
-│       ├── exp01_baseline_resnet50.yaml
-│       ├── exp02_norm_reinhard_resnet50.yaml
-│       ├── exp03_norm_macenko_resnet50.yaml
-│       ├── exp04_aug_geo_resnet50.yaml
-│       ├── exp05_aug_stain_resnet50.yaml
-│       ├── exp06_aug_combined_resnet50.yaml
-│       ├── exp07_interaction_macenko_geo_resnet50.yaml
-│       ├── exp08_interaction_macenko_stain_resnet50.yaml
-│       ├── exp09_interaction_macenko_combined_resnet50.yaml
-│       ├── exp10_backbone_convnext_raw.yaml
-│       └── exp11_backbone_convnext_best.yaml
-├── data/
-│   ├── raw/
-│   │   ├── NCT-CRC-HE-100K-NONORM/
-│   │   └── CRC-VAL-HE-7K/
-│   └── processed/
-│       ├── splits/
-│       │   ├── train.csv
-│       │   ├── val_id.csv
-│       │   ├── test_id.csv
-│       │   └── test_ood.csv
-│       └── templates/
-│           └── reference_stain.png
-├── src/
-│   ├── __init__.py
-│   ├── histo_robust/
-│   │   ├── __init__.py
-│   │   ├── data/
-│   │   │   ├── __init__.py
-│   │   │   ├── paths.py
-│   │   │   ├── dataset.py
-│   │   │   └── datamodule.py
-│   │   ├── normalization/
-│   │   │   ├── __init__.py
-│   │   │   ├── base.py
-│   │   │   ├── reinhard.py
-│   │   │   ├── macenko.py
-│   │   │   └── normalizer_factory.py
-│   │   ├── augmentation/
-│   │   │   ├── __init__.py
-│   │   │   ├── geometric.py
-│   │   │   ├── stain_jitter.py
-│   │   │   └── policy_factory.py
-│   │   ├── models/
-│   │   │   ├── __init__.py
-│   │   │   ├── backbones.py
-│   │   │   └── classifier.py
-│   │   ├── engine/
-│   │   │   ├── __init__.py
-│   │   │   ├── trainer.py
-│   │   │   └── evaluator.py
-│   │   └── utils/
-│   │       ├── __init__.py
-│   │       ├── config.py
-│   │       ├── seed.py
-│   │       ├── metrics.py
-│   │       └── visualization.py
-├── scripts/
-│   ├── prepare_splits.py
-│   ├── run_all_ablations.py
-│   ├── preprocess_normalize.py
-│   └── make_zips.py
-├── results/
-│   ├── metrics/
-│   │   ├── summary_results.csv
-│   │   └── RESULTS_TABLE.md
-│   ├── checkpoints/
-│   └── figures/
-│       └── confusion_matrices/
-```
+├── README.md                    # overview, 13-cell matrix, how to run
+├── DATA.md                      # dataset source, version, split protocol, preprocessing
+├── run_experiments.py           # the complete pipeline (prep → train → evaluate)
+├── notebook.ipynb               # Kaggle execution notebook
+│
+├── results/                     # committed run artifacts
+│   ├── summary_results.csv      # 13-cell metrics table (machine-readable)
+│   ├── RESULTS_TABLE.md         # same table in Markdown
+│   └── splits/
+│       ├── train.csv            # 17,495 rows
+│       ├── val_id.csv           #  3,749 rows
+│       ├── test_id.csv          #  3,749 rows
+│       ├── test_ood.csv         #  7,180 rows
+│       └── reference_stain.png  # canonical stain reference tile
+│
+├── docs/
+│   ├── README.md                # documentation index
+│   ├── PLAN.md                  # this document
+│   ├── RESULTS.md               # results table + per-column reference
+│   ├── CODE_WALKTHROUGH.md      # line-by-line explanation of the pipeline
+│   ├── dataset_card.md          # 9 classes, split rules, domain firewall
+│   ├── kaggle_guide.md          # 1-click execution guide
+│   └── exam_requirement.md      # course rubric
+│
+└── scripts/
+    └── make_zips.py             # packages run_experiments.py for the Kaggle dataset
