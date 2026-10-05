@@ -1,13 +1,11 @@
 \documentclass[11pt,a4paper]{article}
 \usepackage{float}
-\usepackage{tikz}
-\usetikzlibrary{arrows.meta, positioning}
-
 \usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc}
 \usepackage[margin=2.4cm]{geometry}
 \usepackage{amsmath,amssymb}
 \usepackage{graphicx}
+\graphicspath{{docs/images/}{results/splits/}}
 \usepackage{booktabs}
 \usepackage{array}
 \usepackage{rotating}      % sidewaystable for the wide results table
@@ -60,89 +58,46 @@ out-of-domain Macro-F1 score of 0.8689.
 % =====================================================================
 
 \subsection{Clinical Background and Problem Statement}
-Colorectal cancer is one of the leading causes of cancer deaths worldwide. In clinical
-pathology, doctors examine tissue biopsies under a microscope to confirm diagnosis and
-plan patient treatment. To see cellular structures clearly, laboratory technicians
-stain thin tissue slices with two chemical dyes: \textbf{Hematoxylin} and
-\textbf{Eosin} (H\&E).
-\begin{itemize}
-  \item \textbf{Hematoxylin} stains cell nuclei deep purple-blue because it binds to
-        acidic nucleic acids (DNA and RNA).
-  \item \textbf{Eosin} stains the cytoplasm, extracellular matrix, and muscle fibers
-        bright pink-red because it binds to basic proteins.
-\end{itemize}
+Colorectal cancer is a leading cause of cancer mortality worldwide. In clinical pathology, pathologists examine tissue biopsies under a microscope to confirm diagnosis and plan treatment. Tissue sections are routinely stained with \textbf{Hematoxylin} (staining cell nuclei purple-blue by binding to nucleic acids) and \textbf{Eosin} (staining cytoplasm, collagen, and muscle pink-red by binding to proteins), then digitized by whole-slide scanners.
 
-Digital pathology scanners convert these glass slides into high-resolution digital
-images called Whole Slide Images (WSI). In recent years, Deep Convolutional Neural
-Networks (CNNs) and Vision Transformers (ViTs) have shown impressive diagnostic
-accuracy on digital slides.
+While deep neural networks achieve high diagnostic accuracy on slides from their training hospital, their performance drops sharply when deployed at external medical centers. This degradation is caused by \textbf{inter-laboratory staining variation}: differences in chemical brands, reagent freshness, staining protocols, slice thickness, and scanner optical sensors produce pronounced color shifts between hospitals.
 
-However, a critical barrier stops these AI models from safe clinical deployment:
-\textbf{inter-laboratory staining variation}. Even though all hospitals follow
-standard H\&E protocols, the visual appearance of slides differs greatly between
-medical centers. These color shifts happen due to:
-\begin{enumerate}
-  \item Different chemical manufacturers, dye purity, and reagent batch ages.
-  \item Variations in tissue processing time, fixation quality, and microtome section
-        thickness.
-  \item Differences in optical lenses, light sources, and sensor color calibration
-        across digital slide scanner brands (such as Philips, Leica, or Hamamatsu).
-\end{enumerate}
-
-\begin{figure}[h]
+\begin{figure}[htbp]
 \centering
 \begin{tikzpicture}[
-  node distance=9mm,
-  box/.style={draw, rounded corners, align=center, font=\small, inner sep=5pt},
+  scale=0.85, every node/.style={transform shape},
+  node distance=6mm and 18mm,
+  box/.style={draw, rounded corners=3pt, align=center, font=\small, inner sep=4pt},
   sm/.style={font=\small, align=center}
 ]
-\node[sm] (src) {\textbf{Source Hospital}\\Heidelberg\\};
-\node[sm, right=26mm of src] (tgt) {\textbf{Target Hospital}\\Aachen\\};
-\node[box, below=14mm of src, xshift=26mm] (model) {Model trained on source};
-\node[box, below=11mm of model, xshift=-30mm] (id) {In-domain\\$\sim$98.9\% F1};
-\node[box, below=11mm of model, xshift=30mm]  (ood) {Out-of-domain\\$\sim$66.4\% F1};
-\draw[-{Latex}] (src) -- (model);
-\draw[-{Latex}] (tgt) -- (model);
-\draw[-{Latex}] (model) -- (id);
-\draw[-{Latex}] (model) -- (ood);
+\node[sm] (src) {\textbf{Source Hospital}\\Heidelberg cohort};
+\node[sm, right=18mm of src] (tgt) {\textbf{Target Hospital}\\Aachen cohort};
+\node[box, below=7mm of src, xshift=18mm] (model) {Model trained on source};
+\node[box, below=7mm of model, xshift=-24mm] (id) {In-domain test\\$\text{Macro-F1} \approx 98.9\%$};
+\node[box, below=7mm of model, xshift=24mm]  (ood) {Out-of-domain test\\$\text{Macro-F1} \approx 66.4\%$};
+\draw[-{Latex[length=2mm]}] (src) -- (model);
+\draw[-{Latex[length=2mm]}] (tgt) -- (model);
+\draw[-{Latex[length=2mm]}] (model) -- (id);
+\draw[-{Latex[length=2mm]}] (model) -- (ood);
 \end{tikzpicture}
-\caption{Domain shift between two clinical centers. A model trained on one hospital
-cohort loses a large fraction of its diagnostic performance on an external cohort.}
+\caption{The clinical domain shift problem: models trained on one hospital cohort suffer severe performance loss when evaluated on an external cohort.}
 \label{fig:domainshift}
 \end{figure}
 
-\subsection{The Shortcut Learning Challenge}
-When a deep learning model trains on images from only one hospital, it easily learns
-``shortcuts'' instead of true biological features. For example, if tumor regions at
-Hospital A happen to have slightly darker purple tones due to high nuclear density,
-the network may simply learn: \textit{``Dark purple means cancer, light pink means
-benign tissue''}.
 
-When this model is deployed at Hospital B, where normal muscle tissue is stained
-darker purple or cancer tissue is stained lighter pink, the model becomes confused and
-fails. In machine learning, this failure is called \textbf{domain shift} or
-\textbf{out-of-distribution (OOD) degradation}. In clinical medicine, such errors can
-lead to missed tumors or false cancer diagnoses.
+\subsection{The Shortcut Learning Challenge}
+When a deep network is trained on images from a single hospital, it frequently learns color shortcuts instead of true biological features. For instance, if cancer regions at Hospital~A exhibit intense purple staining due to crowded nuclei, the network may simply learn: \textit{``Dark purple means cancer; light pink means benign tissue''}. When deployed at Hospital~B, where normal tissue is stained darker or cancer tissue is lighter, the model fails. This phenomenon, known as \textbf{domain shift} or \textbf{out-of-distribution (OOD) degradation}, poses a critical risk in clinical workflows.
 
 \subsection{Research Questions}
-To understand what interventions effectively protect deep models against staining
-variations, we formulate five direct research questions:
-
-\begin{itemize}
-  \item \textbf{RQ1 (Anchor Baseline):} What is the exact performance drop when an
-        undefended standard model (ResNet-50) is tested on an external hospital cohort?
-  \item \textbf{RQ2 (Color Normalization):} Can algorithmic stain normalization
-        (statistical Reinhard transfer vs.\ physical Macenko deconvolution) close the
-        performance gap without retraining?
-  \item \textbf{RQ3 (Data Augmentation):} Can synthetic stain perturbation (HED
-        jitter) during training match or exceed the benefit of test-time stain
-        normalization?
-  \item \textbf{RQ4 (Defense Synergy):} Are color normalization and data augmentation
-        complementary, or do they conflict when combined?
-  \item \textbf{RQ5 (Architectural Robustness):} Does a modern convolutional network
-        (ConvNeXt-Tiny) or a self-supervised pathology foundation model (Phikon)
-        possess natural stain invariance without explicit defenses?
+To determine what interventions effectively mitigate stain shift, we address five core questions:
+\begin{itemize}[leftmargin=*,itemsep=1pt]
+  \item \textbf{RQ1 (Anchor Baseline):} How severely does domain shift degrade an undefended ResNet-50 when tested on an external hospital cohort?
+  \item \textbf{RQ2 (Color Normalization):} Can statistical (Reinhard) or physical (Macenko) stain normalization restore external diagnostic accuracy?
+  \item \textbf{RQ3 (Data Augmentation):} Does biological HED stain jitter during training match or exceed explicit normalization?
+  \item \textbf{RQ4 (Defense Interaction):} Do stain normalization and data augmentation act synergistically, or do they conflict when combined?
+  \item \textbf{RQ5 (Model Architecture):} Does a modern ConvNet (ConvNeXt-Tiny) or a self-supervised foundation model (Phikon) exhibit intrinsic stain invariance?
 \end{itemize}
+
 
 % =====================================================================
 \section{Related Work}
@@ -419,6 +374,11 @@ normalization steps.}
 \label{fig:pipeline}
 \end{figure}
 
+% =====================================================================
+\section{Methods}
+% =====================================================================
+This section presents our baseline model, our proposed defense strategies, and the evaluation criteria used to measure stain robustness.
+
 \subsection{Baseline Method}
 Our anchor baseline (\textbf{EXP-01}) uses a standard \textbf{ResNet-50} architecture
 initialized with ImageNet-1k weights (\texttt{resnet50.a1\_in1k} from the
@@ -509,98 +469,37 @@ quantifiers:
 % =====================================================================
 \section{Experimental Setup}
 % =====================================================================
-The investigation is structured into three setups following the course project
-specifications.
+Our experimental campaign follows a three-part setup to systematically evaluate stain robustness:
 
-\subsection{Setup 1 --- Baseline vs.\ Main Model}
-We contrast the anchor baseline against our primary defense candidates to measure the
-overall effectiveness of our engineering interventions:
-\begin{itemize}
-  \item \textbf{Baseline configuration (EXP-01):} ResNet-50 trained on raw patches
-        without normalization or data augmentation.
-  \item \textbf{Defended ResNet configuration (EXP-09):} ResNet-50 trained with full
-        defense (Macenko normalization + combined geometric and HED stain
-        augmentation).
-  \item \textbf{Foundation model configuration (EXP-12):} Undefended Phikon linear
-        probe, evaluating intrinsic representations learned from 43 million TCGA
-        patches.
+\subsection{Setup 1 --- Baseline vs.\ Key Defended Models}
+We contrast three anchor configurations to evaluate the overall impact of defenses:
+\begin{itemize}[leftmargin=*,itemsep=1pt]
+  \item \textbf{Anchor Baseline (EXP-01):} ResNet-50 trained on raw, unnormalized patches without data augmentation.
+  \item \textbf{Peak Defended Model (EXP-07):} ResNet-50 combined with Macenko stain normalization and geometric augmentation.
+  \item \textbf{Histology Foundation Model (EXP-12):} Undefended Phikon (ViT-B/16) linear probe, testing self-supervised representations learned from 43 million TCGA tiles.
 \end{itemize}
 
 \subsection{Setup 2 --- Main Research Experiment (13-Cell Ablation Matrix)}
-All 13 experiments are organized across five progressive scientific stages. Each cell
-tests a controlled modification while keeping all other variables identical.
+To isolate individual and joint effects, we design a 13-experiment ablation matrix across five progressive stages (detailed with metrics in Table~\ref{tab:results}):
+\begin{itemize}[leftmargin=*,itemsep=1pt]
+  \item \textbf{Stage 0 (EXP-01):} Establishes the unmitigated domain shift drop under raw staining.
+  \item \textbf{Stage 1 (EXP-02, 03):} Evaluates statistical (Reinhard) vs.\ physical (Macenko) stain normalization.
+  \item \textbf{Stage 2 (EXP-04, 05, 06):} Assesses spatial flips/rotations vs.\ biological HED stain jitter vs.\ their combination.
+  \item \textbf{Stage 3 (EXP-07, 08, 09):} Investigates interactions between Macenko normalization and augmentation policies.
+  \item \textbf{Stage 4 (EXP-10 to 13):} Compares modern ConvNet (ConvNeXt-Tiny) and Vision Transformer (Phikon) backbones under undefended vs.\ fully defended settings.
+\end{itemize}
 
-\begin{table}[h]
-\centering
-\small
-\begin{tabular}{@{}lllll p{5.2cm}@{}}
-\toprule
-\textbf{Exp} & \textbf{Stage} & \textbf{Backbone} & \textbf{Norm.} & \textbf{Aug.} &
-\textbf{Primary hypothesis tested} \\
-\midrule
-EXP-01 & 0 & ResNet-50   & None     & None         & \textbf{Anchor baseline}: establishes the raw domain-shift drop. \\
-EXP-02 & 1 & ResNet-50   & Reinhard & None         & Statistical $\mathcal{L}\alpha\beta$ mean/std matching improves OOD transfer. \\
-EXP-03 & 1 & ResNet-50   & Macenko  & None         & Physical optical-density deconvolution outperforms statistical transfer. \\
-EXP-04 & 2 & ResNet-50   & None     & Aug-Geo      & Spatial orientation invariance alone improves OOD transfer. \\
-EXP-05 & 2 & ResNet-50   & None     & Aug-Stain    & Synthetic HED jitter matches explicit stain normalization. \\
-EXP-06 & 2 & ResNet-50   & None     & Aug-Combined & Spatial and stain augmentations provide additive benefits. \\
-EXP-07 & 3 & ResNet-50   & Macenko  & Aug-Geo      & Combining Macenko with spatial transforms produces gains. \\
-EXP-08 & 3 & ResNet-50   & Macenko  & Aug-Stain    & Adding stain jitter to normalized patches creates conflict. \\
-EXP-09 & 3 & ResNet-50   & Macenko  & Aug-Combined & \textbf{Defended ResNet baseline}: full defense policy. \\
-EXP-10 & 4 & ConvNeXt-T  & None     & None         & Modern $7\times7$ ConvNet provides intrinsic robustness. \\
-EXP-11 & 4 & ConvNeXt-T  & Macenko  & Aug-Combined & ConvNeXt-Tiny benefits from the combined defense policy. \\
-EXP-12 & 4 & Phikon (ViT-B) & None  & None         & Large-scale pathology SSL provides intrinsic stain invariance. \\
-EXP-13 & 4 & Phikon (ViT-B) & Macenko & Aug-Combined & Frozen foundation encoder benefits from artificial defenses. \\
-\bottomrule
-\end{tabular}
-\caption{The 13-cell ablation matrix. ResNet-50 and ConvNeXt-Tiny are ImageNet-1k
-initialised and fine-tuned; Phikon is TCGA/iBOT pretrained and evaluated with a frozen
-encoder.}
-\label{tab:matrix}
-\end{table}
-
-\subsection{Setup 3 --- Analysis, Robustness, and Ablation Design}
-To isolate the exact causal factors that govern stain robustness, our matrix enables
-four targeted ablation comparisons:
-
-\begin{enumerate}
-  \item \textbf{Axis A (normalization mechanism):} EXP-01 (none) vs.\ EXP-02
-        (Reinhard) vs.\ EXP-03 (Macenko), with backbone and augmentation held
-        constant.
-  \item \textbf{Axis B (augmentation policy):} EXP-01 (none) vs.\ EXP-04 (Aug-Geo)
-        vs.\ EXP-05 (Aug-Stain) vs.\ EXP-06 (Aug-Combined), with backbone fixed to
-        ResNet-50 and normalization disabled.
-  \item \textbf{Axis C (defense interaction):} EXP-03 (Macenko alone) against EXP-07,
-        EXP-08, and EXP-09, testing whether augmentation aids or disrupts physically
-        normalized patches.
-  \item \textbf{Axis D (architectural invariance):} EXP-01 vs.\ EXP-10 vs.\ EXP-12
-        (undefended) and EXP-09 vs.\ EXP-11 vs.\ EXP-13 (defended), across classical
-        CNN, modern CNN, and pathology ViT.
+\subsection{Setup 3 --- Targeted Robustness Analysis}
+We dissect the results across four comparative axes:
+\begin{enumerate}[leftmargin=*,itemsep=1pt]
+  \item \textbf{Axis A (Normalization):} EXP-01 vs.\ EXP-02 vs.\ EXP-03 (holding architecture and augmentation fixed).
+  \item \textbf{Axis B (Augmentation):} EXP-01 vs.\ EXP-04 vs.\ EXP-05 vs.\ EXP-06 (without stain normalization).
+  \item \textbf{Axis C (Defense Synergy vs.\ Conflict):} EXP-03 vs.\ EXP-07 vs.\ EXP-08 vs.\ EXP-09 (testing if augmentation aids or impairs normalized tiles).
+  \item \textbf{Axis D (Backbone Invariance):} Standard CNN vs.\ modern ConvNet vs.\ ViT foundation model under raw (EXP-01, 10, 12) and defended (EXP-09, 11, 13) conditions.
 \end{enumerate}
 
-\subsection{Implementation and Hardware Environment}
-All experiments are implemented in Python 3.10 and PyTorch 2.x and executed on Kaggle
-cloud instances.
-
-\begin{table}[h]
-\centering
-\small
-\begin{tabular}{@{}ll@{}}
-\toprule
-\textbf{Configuration parameter} & \textbf{Value} \\
-\midrule
-Compute hardware        & Nvidia Tesla T4 GPU (16\,GB VRAM) \\
-Epochs per experiment   & 8 (sufficient for convergence with cosine decay) \\
-Batch size              & 64 patches \\
-Precision               & PyTorch automatic mixed precision (\texttt{torch.amp.autocast("cuda")}) \\
-Data loading            & 4 worker subprocesses, pinned memory \\
-Model selection         & Checkpoint with highest Macro-F1 on the \texttt{val\_id} split \\
-Total wall-clock runtime & $\approx$3.5 hours for all 13 experiments \\
-\bottomrule
-\end{tabular}
-\caption{Implementation and hardware configuration.}
-\label{tab:hardware}
-\end{table}
+\subsection{Implementation and Training Environment}
+All pipelines are implemented in PyTorch 2.x and executed on a single Kaggle cloud instance equipped with an Nvidia Tesla T4 GPU (16\,GB VRAM). Models are optimized using AdamW ($\lambda = 0.05$, initial $\eta = 10^{-3}$ for CNNs, $\eta = 3\times 10^{-4}$ for the Phikon linear head) with a cosine annealing schedule over 8 epochs (batch size 64). Training uses automatic mixed precision (\texttt{torch.amp}), and model selection strictly retains the checkpoint with the highest Macro-F1 on the in-domain validation split (\texttt{val\_id}). The total runtime across all 13 cells is approximately 3.5 hours.
 
 % =====================================================================
 \section{Results and Discussion}
@@ -661,208 +560,58 @@ Runtimes measured on a Kaggle GPU accelerator.}
 
 \subsection{Stage-by-Stage Interpretation and Discussion}
 
-\subsubsection{Stage 0: The Baseline Vulnerability to Domain Shift}
-The primary baseline (\textbf{EXP-01}, ResNet-50 without normalization or
-augmentation) exhibits near-perfect in-domain classification performance
-($\text{Test-ID F1} = 0.9893$). However, when evaluated on the external hospital
-cohort (\texttt{CRC-VAL-HE-7K}), its performance collapses to
-$\text{Test-OOD F1} = 0.6644$. This constitutes a severe diagnostic drop
-($\Delta\text{-F1} = 0.3249$), retaining only $67.16\%$ of its original capability.
+\subsubsection*{Stage 0: The Baseline Domain-Shift Gap (EXP-01)}
+The raw ResNet-50 baseline achieves near-perfect in-domain classification ($\text{Test-ID F1} = 0.9893$), but drops sharply to $\text{Test-OOD F1} = 0.6644$ on the external Aachen cohort. This severe gap ($\Delta\text{-F1} = 0.3249$, retaining only $67.16\%$ of its original diagnostic power) demonstrates that undefended CNNs rely on hospital-specific color shortcuts rather than robust cell morphology.
 
-This empirically validates the shortcut-learning hypothesis: when unconstrained, deep
-convolutional kernels exploit scanner-specific color calibrations and dye-batch
-concentrations as non-causal predictive shortcuts. When transferred to an external
-pathology laboratory possessing distinct stain absorption spectra, these color
-shortcuts fail catastrophically.
+\subsubsection*{Stage 1: Color Normalization Closes the Gap (EXP-02, EXP-03)}
+Explicit color normalization significantly recovers external performance:
+\begin{itemize}[leftmargin=*,itemsep=1pt]
+  \item \textbf{Reinhard LAB matching (EXP-02):} Restores OOD F1 to $0.8488$ (+18.44 points over baseline; $\text{RR} = 86.07\%$).
+  \item \textbf{Macenko OD deconvolution (EXP-03):} Restores OOD F1 to $0.8090$ (+14.46 points; $\text{RR} = 83.80\%$).
+\end{itemize}
+Reinhard transfer slightly outperforms Macenko ($+3.98$ F1 points) because its global mean/std matching in $\mathcal{L}\alpha\beta$ space is inherently regularized across whole tiles. In contrast, Macenko's extreme angular percentile fitting ($1^{\text{st}}$ and $99^{\text{th}}$ percentiles) can fluctuate on tiles containing large areas of clear background glass.
 
-\subsubsection{Stage 1: Color Normalization as a Decoupling Mechanism}
-Explicit color normalization (\textbf{EXP-02}, \textbf{EXP-03}) provides substantial
-gains in out-of-domain transfer:
-\begin{itemize}
-  \item \textbf{Reinhard statistical transfer (EXP-02).} Normalizing the mean and
-        standard deviation of color channels in Ruderman's decorrelated
-        $\mathcal{L}\alpha\beta$ color space elevates OOD F1 to $0.8488$
-        (+18.44 points over EXP-01), with $\text{RR}_{\text{F1}} = 86.07\%$.
-  \item \textbf{Macenko optical density deconvolution (EXP-03).} Converting RGB
-        images into optical density via the Beer--Lambert law, extracting SVD stain
-        vectors, and mapping concentrations to a canonical tumor tile achieves
-        $\text{OOD F1} = 0.8090$ (+14.46 points over EXP-01).
+\subsubsection*{Stage 2: Spatial vs.\ Color Augmentation (EXP-04 to EXP-06)}
+Testing augmentations without color normalization reveals clear differences:
+\begin{itemize}[leftmargin=*,itemsep=1pt]
+  \item \textbf{Geometric flips and rotations (EXP-04):} Yields $\text{OOD F1} = 0.6172$ ($\Delta\text{-F1} = 0.3727$). Spatial symmetry is biologically valid, but spatial flips do not alter pixel colors; the network still overfits to training colors.
+  \item \textbf{Biological HED stain jitter (EXP-05):} Perturbing Hematoxylin and Eosin dye concentrations during training boosts OOD F1 to $0.7443$ (+7.99 points over baseline), forcing the network to rely on morphological shapes rather than exact hues.
+  \item \textbf{Combined augmentation (EXP-06):} Achieves $0.7105$, underperforming stain jitter alone because compounding multiple random changes without a color anchor expands the training distribution too much.
 \end{itemize}
 
-While Macenko is theoretically more aligned with physical dye-absorption physics,
-Reinhard transfer empirically outperformed standalone Macenko by $3.98$ F1 points.
-This divergence arises because Macenko relies on optical-density thresholding
-($OD > 0.15$) and extreme angular percentile projections (1st and 99th percentiles).
-In patches with high background lucency or sparse cellularity, these percentile
-estimates exhibit numerical volatility. In contrast, Reinhard's global moment matching
-in $\mathcal{L}\alpha\beta$ space is inherently regularized against local tissue voids.
-
-\subsubsection{Stage 2: Spatial vs.\ Photometric Augmentation}
-Ablating data augmentations in the absence of color normalization reveals
-fundamentally divergent roles:
-\begin{itemize}
-  \item \textbf{Geometric augmentations only (EXP-04).} Enforcing spatial invariance
-        via horizontal/vertical flips and orthogonal rotations yielded
-        $\text{OOD F1} = 0.6172$, actually worsening the stain drop
-        ($\Delta\text{-F1} = 0.3727$). Spatial transformations do not perturb color
-        coordinates; the model remains fully free to overfit to site-specific color
-        distributions.
-  \item \textbf{HED stain jitter (EXP-05).} Simulating stochastic biological stain
-        variation directly in deconvolved HED space boosted OOD F1 to $0.7443$
-        (+7.99 points over EXP-01; $\text{RR}_{\text{F1}} = 75.36\%$). Perturbing
-        Hematoxylin and Eosin dye concentrations during training forces the network to
-        abandon strict color-intensity boundaries in favour of topological and
-        morphological cues.
-  \item \textbf{Combined augmentations (EXP-06).} Combining spatial flips with HED
-        jitter produced $\text{OOD F1} = 0.7105$, underperforming stain jitter alone.
-        Without an explicit anchor to align the target distribution, compounding
-        multiple stochastic perturbations expands the optimisation search space
-        without guaranteeing convergence to stain-invariant representations.
+\subsubsection*{Stage 3: Normalization $\times$ Augmentation Interaction (EXP-07 to EXP-09)}
+\begin{itemize}[leftmargin=*,itemsep=1pt]
+  \item \textbf{Top Overall Model (EXP-07):} Combining Macenko normalization with spatial flips/rotations achieves the highest external accuracy in the study: \textbf{OOD F1 $= 0.8689$}, \textbf{$\Delta$-F1 $= 0.1028$}, and \textbf{$\text{RR} = 89.42\%$}. Normalization standardizes color while spatial rotation prevents position memorization.
+  \item \textbf{The Stain Jitter Conflict (EXP-08):} Adding stochastic HED stain jitter to Macenko-normalized tiles causes OOD F1 to drop to $0.7850$ (down $8.39$ points from EXP-07). \textbf{Stain jitter conflicts with normalization}: once images are mapped into a clean standard color space, injecting random color noise corrupts that standard.
+  \item \textbf{Full Defense (EXP-09):} Achieves $0.8604$, confirming that stain jitter adds no benefit once physical normalization is already present.
 \end{itemize}
 
-\subsubsection{Stage 3: Defense Interaction --- Synergy and Redundancy Conflict}
-Stage 3 investigated whether combining physical color normalization (Macenko) with
-data augmentations creates additive robustness or destructive interference:
-\begin{itemize}
-  \item \textbf{The study's peak model (EXP-07).} Combining Macenko normalization
-        with spatial geometric augmentation achieved the highest performance across
-        the entire matrix: \textbf{Test-OOD F1 $= 0.8689$},
-        \textbf{$\Delta$-F1 $= 0.1028$}, \textbf{$\text{RR}_{\text{F1}} = 89.42\%$}.
-        Macenko standardizes the color distribution to the canonical reference while
-        orthogonal rotations prevent spatial memorisation, creating genuine synergy.
-  \item \textbf{The stain-jitter conflict (EXP-08).} Introducing HED stain jitter on
-        top of Macenko-normalized tiles caused OOD performance to deteriorate to
-        $0.7850$, a drop of $8.39$ points relative to EXP-07. This uncovers a critical
-        theoretical insight: \textbf{synthetic stain jitter is redundant and actively
-        conflicting once deterministic normalization is applied}. Once all images have
-        been mapped into a standard color space, injecting stochastic color noise
-        corrupts the standardized optical-density manifold and degrades feature
-        consistency.
-  \item \textbf{Full-defense ResNet (EXP-09).} Reached $\text{OOD F1} = 0.8604$.
-        While resilient, it remains inferior to EXP-07, confirming that stain jitter
-        offers no additive value once physical normalization is enforced.
-\end{itemize}
-
-\subsubsection{Stage 4: Modern Architectures and Foundation Model Dynamics}
-\begin{itemize}
-  \item \textbf{ConvNeXt-Tiny (EXP-10 vs.\ EXP-11).} In the undefended raw setting,
-        ConvNeXt-Tiny (EXP-10: $\text{OOD F1} = 0.6821$) outperformed raw ResNet-50
-        ($0.6644$), indicating that modern architectural designs --- such as
-        $7\times7$ depthwise convolutions and inverted bottleneck dimensions --- confer
-        modest intrinsic spatial robustness. When defended with Macenko and combined
-        augmentations (EXP-11), ConvNeXt-Tiny attained $\text{OOD F1} = 0.8685$,
-        matching the defended ResNet baseline.
-  \item \textbf{Phikon foundation model (EXP-12 vs.\ EXP-13).}
-        \begin{itemize}
-          \item \textit{Undefended superiority (EXP-12).} Phikon --- a ViT-B/16
-                pretrained on $\sim$43 million TCGA tiles via iBOT self-supervised
-                learning --- evaluated through a frozen-backbone linear probe,
-                attained $\text{OOD F1} = 0.8239$ without any normalization or
-                augmentation. Training only the 6{,}921 parameters of its
-                classification head for 9.08 minutes, it surpassed all undefended
-                supervised models by more than $14$ F1 points. Self-supervised
-                pretraining across thousands of diverse clinical slides naturally
-                encodes stain-invariant morphological representations.
-          \item \textit{The foundation model breakdown (EXP-13).} Most remarkably,
-                applying the combined defense policy (Macenko + Aug-Combined) to
-                Phikon caused its performance to collapse: in-domain F1 dropped from
-                $0.9912$ to $0.9050$, and OOD F1 fell from $0.8239$ to
-                \textbf{$0.6982$} --- a loss of $12.57$ points.
-          \item \textit{Mechanistic reason.} Phikon's self-supervised representation
-                manifold was constructed from natural, unnormalized whole-slide images
-                spanning hundreds of institutions. Algorithmic color deconvolution
-                transforms tissue patches into an artificial color distribution that
-                deviates from Phikon's pretraining manifold. Because the encoder is
-                frozen, the linear head cannot compensate for this domain distortion,
-                causing feature degradation. \textbf{Standard preprocessing defenses
-                that protect shallow CNNs actively harm self-supervised pathology
-                foundation models.}
-        \end{itemize}
+\subsubsection*{Stage 4: Modern Architectures and Foundation Models (EXP-10 to EXP-13)}
+\begin{itemize}[leftmargin=*,itemsep=1pt]
+  \item \textbf{ConvNeXt-Tiny (EXP-10, 11):} When undefended, ConvNeXt-Tiny slightly outperforms raw ResNet-50 ($0.6821$ vs.\ $0.6644$), aided by its larger $7\times 7$ depthwise receptive fields. When defended (EXP-11), it reaches $0.8685$, matching defended ResNet.
+  \item \textbf{Phikon Foundation Model (EXP-12, 13):}
+    \begin{itemize}[leftmargin=*,itemsep=1pt]
+      \item \textit{Undefended Superiority (EXP-12):} Phikon (ViT-B/16 pretrained on $\sim$43M TCGA tiles via iBOT self-supervised learning) achieves \textbf{$0.8239$ OOD F1} with a simple linear probe trained in 9 minutes. Its massive multi-center pretraining naturally encodes stain invariance.
+      \item \textit{The Foundation Model Breakdown (EXP-13):} Adding Macenko normalization and augmentations causes Phikon's OOD F1 to collapse to \textbf{$0.6982$} (a $12.57$ point drop). Because Phikon's deep representations were learned on real, unnormalized slides, artificial color deconvolution distorts input images away from its pretrained manifold. \textbf{Traditional normalization defenses that help CNNs actively harm self-supervised foundation models.}
+    \end{itemize}
 \end{itemize}
 
 % =====================================================================
 \section{Error and Qualitative Analysis}
 % =====================================================================
-Because digital histopathology requires discriminating subtle cellular transitions,
-domain shift does not degrade all tissue classes uniformly. Based on the biological
-characteristics of the nine colorectal classes defined in \texttt{DATA.md} and the
-mathematical transformations of the defense pipeline, we analyse four major failure
-modes.
+Because digital histopathology requires distinguishing subtle cellular transitions, domain shift does not degrade all tissue classes equally. Grounded in the morphology of the nine colorectal classes from \texttt{DATA.md}, we analyze the four most frequent failure modes:
 
-\subsection{Confusion Mode 1: Eosinophilic Fibrillar Overlap (\texttt{STR} vs.\ \texttt{MUS})}
-\textbf{Biological and optical basis.} Smooth muscle (\texttt{MUS}, colonic
-muscularis propria) and desmoplastic stroma (\texttt{STR}, fibrous cancer-associated
-stroma) are both composed of elongated spindle cells embedded in eosinophilic
-extracellular matrices. In standard H\&E staining, both absorb Eosin dye vigorously,
-appearing in varying shades of pink and red.
+\subsection{Confusion Mode 1: Muscle vs.\ Stroma (\texttt{STR} vs.\ \texttt{MUS})}
+Smooth muscle (\texttt{MUS}) and cancer-associated stroma (\texttt{STR}) are both composed of elongated spindle cells embedded in dense pink/red eosinophilic fibers. Distinguishing them relies on subtle nuclear shapes: smooth muscle has parallel bundles with blunt, cigar-shaped nuclei, whereas stroma exhibits wavy collagen with tapered fibroblasts. When external scanner illumination shifts toward red or slide incubation times vary, the contrast between collagen and muscle fibers is flattened. Unnormalized models (EXP-01) heavily confuse \texttt{STR} with \texttt{MUS}. Macenko normalization largely resolves this by standardizing eosin extinction coefficients.
 
-\textbf{Mechanism of error.} Discriminating \texttt{MUS} from \texttt{STR} relies on
-delicate cytological nuances: smooth muscle features parallel bundles of uniform cells
-with blunt, cigar-shaped nuclei, whereas reactive stroma exhibits irregular, wavy
-collagen bands with tapered, hyperchromatic fibroblasts. When external scanner
-illumination shifts toward red/orange, or when slide preparation alters eosin
-incubation times, the subtle optical-density contrast between fibrillar collagen and
-cytoplasmic myofibrils is flattened. Unnormalized models (EXP-01) heavily misclassify
-\texttt{STR} as \texttt{MUS}. While Macenko normalization mitigates this by
-standardizing eosin extinction coefficients, high-grade desmoplastic reactions with
-edema remain prone to misidentification.
+\subsection{Confusion Mode 2: Transparent and Pale Tissues (\texttt{ADI}, \texttt{BACK}, \texttt{MUC})}
+Adipose tissue (\texttt{ADI}) consists of empty fat vacuoles; background (\texttt{BACK}) is clear glass; and mucus (\texttt{MUC}) consists of faint, pale extracellular pools. When whole-slide scanners fluctuate in lamp brightness, background glass deviates from pure white. Under Reinhard color transfer, matching global color variance can bleach faint basophilic mucus pools into pure white, causing the model to misclassify mucus as clear background or empty fat droplets.
 
-\subsection{Confusion Mode 2: Hypocellular and Optically Transparent Entities (\texttt{ADI}, \texttt{BACK}, \texttt{MUC})}
-\textbf{Biological and optical basis.}
-\begin{itemize}
-  \item Adipose tissue (\texttt{ADI}) consists of mature lipocytes whose massive
-        intracellular lipid droplets dissolve during paraffin embedding, leaving thin
-        cytoplasmic rims surrounding clear voids.
-  \item Background (\texttt{BACK}) represents clear glass slide regions and mounting
-        media with near-100\% optical transmission ($OD \approx 0$).
-  \item Mucus (\texttt{MUC}) consists of extracellular mucin pools exhibiting faint,
-        pale amphophilic/basophilic staining.
-\end{itemize}
+\subsection{Confusion Mode 3: Optical Density SVD Instability on Debris (\texttt{DEB})}
+Macenko normalization assumes every patch contains distinct Hematoxylin and Eosin dye concentrations. However, necrotic debris (\texttt{DEB}) contains irregular dead cell fragments, clotted blood, and cautery burn marks with chaotic dye absorption. In these degenerated patches, the optical density scatter plot lacks clean dye axes. This causes the SVD projection to align with optical noise, creating severe color distortion (such as oversaturated purple blotches) that misleads CNNs into predicting invasive cancer (\texttt{TUM}).
 
-\textbf{Mechanism of error.} In poorly calibrated whole-slide scanners, slight
-fluctuations in optical lamp intensity shift background glass pixels away from pure
-white. Under Reinhard color transfer, if an image contains extensive background,
-matching the global standard deviation can compress faint basophilic mucin signals
-into near-white levels. Consequently, the classifier misinterprets amorphous
-extracellular mucin pools (\texttt{MUC}) as transparent background (\texttt{BACK}) or
-empty lipid spaces (\texttt{ADI}), leading to false-negative errors in mucinous
-adenocarcinoma diagnosis.
-
-\subsection{Confusion Mode 3: Optical Density SVD Instability in Degenerated Patches (\texttt{DEB})}
-\textbf{Mathematical and optical basis.} Macenko normalization extracts stain vectors
-by projecting non-background optical-density vectors ($OD > 0.15$) onto the
-two-dimensional plane spanned by the top two singular vectors of the SVD, determining
-the stain angles $\phi$ via extreme angular percentiles (1st and 99th).
-
-\textbf{Mechanism of error.} Necrotic debris (\texttt{DEB}) consists of karyorrhectic
-nuclear dust, clotted haemorrhages, and coagulative necrosis, exhibiting unstructured
-and erratic dye binding. When a tile consists predominantly of cautery artifacts or
-necrotic debris, the optical-density scatter plot does not form the characteristic
-two-lobed cone of distinct Hematoxylin and Eosin axes. In these ill-conditioned cases:
-\begin{enumerate}
-  \item The SVD plane aligns with artifactual optical noise rather than true
-        absorption spectra.
-  \item The resulting pseudo-stain vectors produce extreme, unphysiological
-        concentration scaling factors.
-  \item The normalized tile suffers extreme color distortion (for example
-        oversaturated purple bleeding or complete chromatic inversion).
-\end{enumerate}
-This causes both ResNet-50 and ConvNeXt-Tiny to produce erratic predictions,
-frequently mistaking necrotic tissue for invasive tumor (\texttt{TUM}).
-
-\subsection{Confusion Mode 4: Nuclear Pleomorphism and Immuno-Inflammatory Mimicry (\texttt{LYM} vs.\ \texttt{TUM})}
-\textbf{Biological and optical basis.} Dense lymphocytic aggregates (\texttt{LYM})
-feature small, spherical, intensely hyperchromatic nuclei with minimal cytoplasm,
-absorbing Hematoxylin heavily. Conversely, poorly differentiated tumor epithelium
-(\texttt{TUM}) exhibits severe nuclear atypia, enlarged prominent nucleoli, and coarse
-chromatin distribution.
-
-\textbf{Mechanism of error.} In the undefended baseline (EXP-01), scanner illumination
-that increases contrast causes dense inflammatory infiltrates to saturate the
-blue/violet channel. The model, lacking normalized nuclear-to-cytoplasmic intensity
-reference points, mistakes dense lymphocyte aggregations for high-grade adenocarcinoma
-glands. Applying Macenko or Reinhard normalization re-establishes consistent
-optical-density baselines, successfully resolving this confusion in EXP-07.
+\subsection{Confusion Mode 4: Dense Immune Cells vs.\ Tumor Glands (\texttt{LYM} vs.\ \texttt{TUM})}
+Dense clusters of lymphocytes (\texttt{LYM}) contain small, spherical, intensely dark nuclei with almost no cytoplasm. Poorly differentiated tumor cells (\texttt{TUM}) also have high nuclear density and dark chromatin. In the undefended baseline (EXP-01), scanner contrast spikes saturate the blue/purple channel, causing the network to mistake benign lymphocytic aggregates for high-grade tumor glands. Normalization (EXP-07) re-establishes a balanced color dynamic range, effectively resolving this false alarm.
 
 % =====================================================================
 \section{Conclusion and Limitations}
