@@ -14,21 +14,13 @@ Deep learning models achieve high accuracy in digital histopathology. However, w
 ## 2. Introduction and Research Question
 
 ### 2.1. Clinical Background and Problem Statement
-Colorectal cancer is one of the leading causes of cancer deaths worldwide. In clinical pathology, doctors examine tissue biopsies under a microscope to confirm diagnosis and plan patient treatment. To see cellular structures clearly, laboratory technicians stain thin tissue slices with two chemical dyes: **Hematoxylin** and **Eosin** (H&E).
-- **Hematoxylin** stains cell nuclei deep purple-blue because it binds to acidic nucleic acids (DNA and RNA).
-- **Eosin** stains the cytoplasm, extracellular matrix, and muscle fibers bright pink-red because it binds to basic proteins.
+Colorectal cancer is a leading cause of cancer mortality worldwide. In clinical pathology, pathologists examine tissue biopsies under a microscope to confirm diagnosis and plan treatment. Tissue sections are routinely stained with **Hematoxylin** (staining cell nuclei purple-blue by binding to nucleic acids) and **Eosin** (staining cytoplasm, collagen, and muscle pink-red by binding to proteins), then digitized by whole-slide scanners.
 
-Digital pathology scanners convert these glass slides into high-resolution digital images called Whole Slide Images (WSI). In recent years, Deep Convolutional Neural Networks (CNNs) and Vision Transformers (ViTs) have shown impressive diagnostic accuracy on digital slides. 
-
-However, a critical barrier stops these AI models from safe clinical deployment: **inter-laboratory staining variation**. Even though all hospitals follow standard H&E protocols, the visual appearance of slides differs greatly between medical centers. These color shifts happen due to:
-1. Different chemical manufacturers, dye purity, and reagent batch ages.
-2. Variations in tissue processing time, fixation quality, and microtome section thickness.
-3. Differences in optical lenses, light sources, and sensor color calibration across digital slide scanner brands (such as Philips, Leica, or Hamamatsu).
+While deep neural networks achieve high diagnostic accuracy on slides from their training hospital, their performance drops sharply when deployed at external medical centers. This degradation is caused by **inter-laboratory staining variation**: differences in chemical brands, reagent freshness, staining protocols, slice thickness, and scanner optical sensors produce pronounced color shifts between hospitals.
 
 ```text
 Source Hospital (Heidelberg)             Target Hospital (Aachen)
 - Deep purple hematoxylin bias           - Bright pink eosin bias
-- Specific scanner illumination profile  - Independent optical calibration
                  \                           /
                   \                         /
                    v                       v
@@ -42,18 +34,16 @@ Source Hospital (Heidelberg)             Target Hospital (Aachen)
 ```
 
 ### 2.2. The Shortcut Learning Challenge
-When a deep learning model trains on images from only one hospital, it easily learns "shortcuts" instead of true biological features. For example, if tumor regions at Hospital A happen to have slightly darker purple tones due to high nuclear density, the network may simply learn: *"Dark purple means cancer, light pink means benign tissue"*.
-
-When this model is deployed at Hospital B, where normal muscle tissue is stained darker purple or cancer tissue is stained lighter pink, the model becomes confused and fails. In machine learning, this failure is called **domain shift** or **out-of-distribution (OOD) degradation**. In clinical medicine, such errors can lead to missed tumors or false cancer diagnoses.
+When a deep network is trained on images from a single hospital, it frequently learns color shortcuts instead of true biological features. For instance, if cancer regions at Hospital~A exhibit intense purple staining due to crowded nuclei, the network may simply learn: *"Dark purple means cancer; light pink means benign tissue"*. When deployed at Hospital~B, where normal tissue is stained darker or cancer tissue is lighter, the model fails. This phenomenon, known as **domain shift** or **out-of-distribution (OOD) degradation**, poses a critical risk in clinical workflows.
 
 ### 2.3. Research Questions
-To understand what interventions effectively protect deep models against staining variations, we formulate five direct research questions:
+To determine what interventions effectively mitigate stain shift, we address five core questions:
+- **RQ1 (Anchor Baseline):** How severely does domain shift degrade an undefended ResNet-50 when tested on an external hospital cohort?
+- **RQ2 (Color Normalization):** Can statistical (Reinhard) or physical (Macenko) stain normalization restore external diagnostic accuracy?
+- **RQ3 (Data Augmentation):** Does biological HED stain jitter during training match or exceed explicit normalization?
+- **RQ4 (Defense Interaction):** Do stain normalization and data augmentation act synergistically, or do they conflict when combined?
+- **RQ5 (Model Architecture):** Does a modern ConvNet (ConvNeXt-Tiny) or a self-supervised foundation model (Phikon) exhibit intrinsic stain invariance?
 
-- **Research Question 1 (Anchor Baseline):** What is the exact performance drop when an undefended standard model (ResNet-50) is tested on an external hospital cohort?
-- **Research Question 2 (Color Normalization):** Can algorithmic stain normalization (statistical Reinhard transfer vs. physical Macenko deconvolution) close the performance gap without retraining?
-- **Research Question 3 (Data Augmentation):** Can synthetic stain perturbation (HED jitter) during training match or exceed the benefit of test-time stain normalization?
-- **Research Question 4 (Defense Synergy):** Are color normalization and data augmentation complementary, or do they conflict when combined?
-- **Research Question 5 (Architectural Robustness):** Does a modern convolutional network (ConvNeXt-Tiny) or a self-supervised pathology foundation model (Phikon) possess natural stain invariance without explicit defenses?
 
 ---
 
@@ -197,6 +187,10 @@ flowchart LR
     end
 ```
 
+## 5. Methods
+
+This section details our anchor baseline, the proposed defense framework, and the comparison strategy used to quantify stain robustness.
+
 ### 5.1. Baseline Method
 Our anchor baseline (**EXP-01**) uses a standard **ResNet-50** architecture initialized with ImageNet-1k weights (`resnet50.a1_in1k` from the `timm` library). 
 - **Preprocessing:** Raw RGB images are resized to $224 \times 224$ pixels without color normalization (`norm=none`).
@@ -222,14 +216,11 @@ To fairly evaluate the impact of each technique, we measure classification perfo
    We calculate the harmonic mean of precision and recall for each class $c \in \{0, \dots, 8\}$, then take the unweighted arithmetic mean across all 9 classes:
    $$\text{Macro-F1} = \frac{1}{9}\sum_{c=0}^8 \frac{2 \cdot \text{Precision}_c \cdot \text{Recall}_c}{\text{Precision}_c + \text{Recall}_c}$$
    This metric weights all tissue categories equally, preventing majority classes (such as `ADI`) from hiding poor diagnostic performance on minority classes (such as `DEB`).
-2. **Secondary Metric — Top-1 Accuracy (`Acc`):**  
-   The overall percentage of correctly classified patches.
+2. **Secondary Metric — Top-1 Accuracy (`Acc`):** The overall percentage of correctly classified patches.
 3. **Absolute Performance Drop ($\Delta\text{-F1}$):**  
-   The absolute drop in F1 score when moving from the in-domain test set to the external target test set:
    $$\Delta\text{-F1} = \text{F1}_{\text{ID}} - \text{F1}_{\text{OOD}}$$
    *(Lower is better; $\Delta\text{-F1} = 0$ represents perfect stain invariance).*
 4. **Relative Retention Rate ($\text{RR}_{\text{F1}}$):**  
-   The percentage of source diagnostic performance preserved in the external hospital domain:
    $$\text{RR}_{\text{F1}} = \left(\frac{\text{F1}_{\text{OOD}}}{\text{F1}_{\text{ID}}}\right) \times 100\%$$
    *(Higher is better; $100\%$ indicates zero performance loss across medical centers).*
 
@@ -237,57 +228,28 @@ To fairly evaluate the impact of each technique, we measure classification perfo
 
 ## 6. Experimental Setup
 
-The investigation is structured into three clear setups following the course project specifications.
+Our experimental campaign follows a three-part setup to systematically evaluate stain robustness:
 
-### 6.1. Setup 1 — Baseline vs. Main Model
-We contrast the anchor baseline against our primary defense candidates to measure the overall effectiveness of our engineering interventions:
-- **Baseline Configuration (EXP-01):** ResNet-50 trained on raw patches without normalization or data augmentation.
-- **Defended ResNet Configuration (EXP-09):** ResNet-50 trained with full defense (Macenko normalization + combined geometric and HED stain augmentation).
-- **Foundation Model Configuration (EXP-12):** Undefended Phikon linear probe evaluating intrinsic representations learned from 43 million TCGA patches.
+### 6.1. Setup 1 — Baseline vs. Key Defended Models
+We contrast three anchor configurations to evaluate the overall impact of defenses:
+- **Anchor Baseline (EXP-01):** ResNet-50 trained on raw, unnormalized patches without data augmentation.
+- **Peak Defended Model (EXP-07):** ResNet-50 combined with Macenko stain normalization and geometric augmentation.
+- **Histology Foundation Model (EXP-12):** Undefended Phikon (ViT-B/16) linear probe, testing self-supervised representations learned from 43 million TCGA tiles.
 
-### 6.2. Setup 2 — Main Research Experiment (The 13-Cell Ablation Matrix)
-All 13 experiments are organized across five progressive scientific stages. Each cell tests a controlled modification while keeping all other variables identical:
+### 6.2. Setup 2 — Main Research Experiment (13-Cell Ablation Matrix)
+To isolate individual and joint effects, we design a 13-experiment ablation matrix across five progressive stages:
+- **Stage 0 (EXP-01):** Establishes the unmitigated domain shift drop under raw staining.
+- **Stage 1 (EXP-02, 03):** Evaluates statistical (Reinhard) vs. physical (Macenko) stain normalization.
+- **Stage 2 (EXP-04, 05, 06):** Assesses spatial flips/rotations vs. biological HED stain jitter vs. their combination.
+- **Stage 3 (EXP-07, 08, 09):** Investigates interactions between Macenko normalization and augmentation policies.
+- **Stage 4 (EXP-10 to 13):** Compares modern ConvNet (ConvNeXt-Tiny) and Vision Transformer (Phikon) backbones under undefended vs. fully defended settings.
 
-| Exp ID | Stage | Backbone | Pretraining Source | Normalization | Augmentation Policy | Primary Hypothesis Tested |
-| :---: | :---: | :---: | :---: | :---: | :---: | :--- |
-| **EXP-01** | Stage 0 | ResNet-50 | ImageNet-1k | None | None | **Anchor Baseline:** Establishes the raw domain shift drop. |
-| **EXP-02** | Stage 1 | ResNet-50 | ImageNet-1k | Reinhard | None | Statistical LAB mean/std matching improves OOD transfer. |
-| **EXP-03** | Stage 1 | ResNet-50 | ImageNet-1k | Macenko | None | Physical optical density deconvolution outperforms statistical transfer. |
-| **EXP-04** | Stage 2 | ResNet-50 | ImageNet-1k | None | Aug-Geo | Spatial orientation invariance alone improves OOD transfer. |
-| **EXP-05** | Stage 2 | ResNet-50 | ImageNet-1k | None | Aug-Stain | Synthetic HED jitter matches explicit stain normalization. |
-| **EXP-06** | Stage 2 | ResNet-50 | ImageNet-1k | None | Aug-Combined | Spatial and stain augmentations provide additive benefits. |
-| **EXP-07** | Stage 3 | ResNet-50 | ImageNet-1k | Macenko | Aug-Geo | Combining Macenko with spatial transforms produces gains. |
-| **EXP-08** | Stage 3 | ResNet-50 | ImageNet-1k | Macenko | Aug-Stain | Adding stain jitter to normalized patches creates conflict. |
-| **EXP-09** | Stage 3 | ResNet-50 | ImageNet-1k | Macenko | Aug-Combined | **Defended ResNet Baseline:** Full defense policy for ResNet. |
-| **EXP-10** | Stage 4 | ConvNeXt-T | ImageNet-1k | None | None | Modern 7x7 ConvNet architecture provides intrinsic robustness. |
-| **EXP-11** | Stage 4 | ConvNeXt-T | ImageNet-1k | Macenko | Aug-Combined | ConvNeXt-Tiny benefits from the combined defense policy. |
-| **EXP-12** | Stage 4 | Phikon (ViT-B) | TCGA (iBOT SSL) | None | None | Large-scale pathology SSL provides intrinsic stain invariance. |
-| **EXP-13** | Stage 4 | Phikon (ViT-B) | TCGA (iBOT SSL) | Macenko | Aug-Combined | Frozen foundation encoder benefits from artificial defense policies. |
+### 6.3. Setup 3 — Targeted Robustness Analysis
+We dissect the results across four comparative axes:
+1. **Axis A (Normalization):** EXP-01 vs. EXP-02 vs. EXP-03 (holding architecture and augmentation fixed).
+2. **Axis B (Augmentation):** EXP-01 vs. EXP-04 vs. EXP-05 vs. EXP-06 (without stain normalization).
+3. **Axis C (Defense Synergy vs. Conflict):** EXP-03 vs. EXP-07 vs. EXP-08 vs. EXP-09 (testing if augmentation aids or impairs normalized tiles).
+4. **Axis D (Backbone Invariance):** Standard CNN vs. modern ConvNet vs. ViT foundation model under raw (EXP-01, 10, 12) and defended (EXP-09, 11, 13) conditions.
 
-### 6.3. Setup 3 — Analysis, Robustness, and Ablation Design
-To isolate the exact causal factors that govern stain robustness, our matrix enables four targeted ablation comparisons:
-
-1. **Ablation Axis A (Normalization Mechanism):**  
-   Comparing `EXP-01` (None) vs. `EXP-02` (Reinhard) vs. `EXP-03` (Macenko) with backbone and augmentation held constant.
-2. **Ablation Axis B (Augmentation Policy):**  
-   Comparing `EXP-01` (None) vs. `EXP-04` (Aug-Geo) vs. `EXP-05` (Aug-Stain) vs. `EXP-06` (Aug-Combined) with backbone fixed to ResNet-50 and normalization disabled.
-3. **Ablation Axis C (Defense Interaction):**  
-   Comparing `EXP-03` (Macenko alone) against `EXP-07`, `EXP-08`, and `EXP-09` to test whether data augmentation aids or disrupts physically normalized patches.
-4. **Ablation Axis D (Architectural Invariance):**  
-   Comparing pairs `EXP-01` vs. `EXP-10` vs. `EXP-12` (undefended) and `EXP-09` vs. `EXP-11` vs. `EXP-13` (defended) across classical CNN, modern CNN, and pathology Vision Transformer architectures.
-
-### 6.4. Implementation and Hardware Environment
-All experiments are implemented in Python 3.10 and PyTorch 2.x and executed on Kaggle cloud instances:
-
-| Configuration Parameter | Value |
-| :--- | :--- |
-| **Compute Hardware** | Nvidia Tesla T4 GPU ($16\,\text{GB}$ VRAM) |
-| **Epochs per Experiment** | 8 epochs (sufficient for convergence with cosine decay) |
-| **Batch Size** | 64 patches |
-| **Precision** | PyTorch Automatic Mixed Precision (`torch.amp.autocast("cuda")`) |
-| **Workers** | 4 data loader subprocesses with pinned GPU memory |
-| **Model Selection** | Checkpoint achieving highest Macro-F1 on `val_id` split |
-| **Total Wall-Clock Runtime** | Approximately 3.5 hours for all 13 experiments |
-
----
-*Sections 7 through 11 (Results and Discussion, Error and Qualitative Analysis, Conclusion, References, and Appendix) will follow in the subsequent report deliverable.*
+### 6.4. Implementation and Training Environment
+All pipelines are implemented in PyTorch 2.x and executed on a single Kaggle cloud instance equipped with an Nvidia Tesla T4 GPU (16 GB VRAM). Models are optimized using AdamW ($\lambda = 0.05$, initial $\eta = 10^{-3}$ for CNNs, $\eta = 3 \times 10^{-4}$ for the Phikon linear head) with a cosine annealing schedule over 8 epochs (batch size 64). Training uses automatic mixed precision (`torch.amp`), and model selection strictly retains the checkpoint with the highest Macro-F1 on the in-domain validation split (`val_id`). The total runtime across all 13 cells is approximately 3.5 hours.
