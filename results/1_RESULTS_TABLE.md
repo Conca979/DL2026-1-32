@@ -1,4 +1,4 @@
-# Final Ablation Results
+# Final Ablation Results - seed 42
 
 | exp_id   | stage   | backbone      | norm     | aug          |   best_val_f1 |   test_id_f1 |   test_ood_f1 |   delta_f1 |   rr_f1 |   test_id_acc |   test_ood_acc |   minutes |
 |:---------|:--------|:--------------|:---------|:-------------|--------------:|-------------:|--------------:|-----------:|--------:|--------------:|---------------:|----------:|
@@ -15,3 +15,4 @@
 | EXP-11   | Stage 4 | convnext_tiny | macenko  | aug_combined |        0.9757 |       0.9763 |        0.8685 |     0.1077 |   88.97 |        0.9763 |         0.8997 |     20.7  |
 | EXP-12   | Stage 4 | phikon        | none     | none         |        0.9915 |       0.9912 |        0.8239 |     0.1673 |   83.12 |        0.9912 |         0.8623 |      9.08 |
 | EXP-13   | Stage 4 | phikon        | macenko  | aug_combined |        0.9018 |       0.905  |        0.6982 |     0.2068 |   77.15 |        0.9045 |         0.7398 |     20.11 |
+
