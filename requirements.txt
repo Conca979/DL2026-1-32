@@ -1,0 +1,14 @@
+# Core deep learning framework & vision
+torch
+torchvision
+pillow
+numpy
+
+# Modeling, pretrained architectures & foundation models
+timm
+transformers
+
+# Data processing & evaluation metrics
+pandas
+scikit-learn
+tabulate

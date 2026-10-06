@@ -1,15 +1,31 @@
+"""Central configurations, constants, classes, and 13-cell experiment definitions."""
+
 from __future__ import annotations
 
 from typing import Dict, List
 
 # Nine histological classes in colorectal cancer tissue classification
-CLASSES: List[str] = ["ADI", "BACK", "DEB", "LYM", "MUC", "MUS", "NORM", "STR", "TUM"]
+CLASSES: List[str] = [
+  "ADI",   # Adipose
+  "BACK",  # Background glass
+  "DEB",   # Debris
+  "LYM",   # Lymphocytes
+  "MUC",   # Mucus
+  "MUS",   # Smooth muscle
+  "NORM",  # Normal mucosa
+  "STR",   # Stroma
+  "TUM",   # Colorectal Carcinoma
+]
+
 CLASS_TO_IDX: Dict[str, int] = {name: i for i, name in enumerate(CLASSES)}
 NUM_CLASSES: int = len(CLASSES)
 
 # Standard ImageNet normalization parameters
 IMAGENET_MEAN: List[float] = [0.485, 0.456, 0.406]
 IMAGENET_STD: List[float] = [0.229, 0.224, 0.225]
+
+# Supported image file extensions
+SUPPORTED_IMAGE_EXTS = {".png", ".tif", ".tiff", ".jpg", ".jpeg", ".bmp"}
 
 # 13-Cell Ablation Study Matrix
 EXPERIMENTS: List[Dict[str, str]] = [
