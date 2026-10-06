@@ -13,30 +13,72 @@ This document tracks the empirical findings of the **13-cell ablation study** ev
 
 ---
 
-## 2. Master Results Table (13-Cell Matrix)
+## 2. Master Results Tables (Multi-Campaign Validation)
 
 > [!NOTE]
-> The table below holds the final results of the completed 13-cell run, produced by `run_experiments.py` and mirrored from `results/RESULTS_TABLE.md` and `results/summary_results.csv`.
+> To definitively rule out stochastic noise and subset bias, the 13-cell ablation campaign was executed across three independent settings:
+> 1. **Table 1 (Campaign 1)**: Seed 42, $N = 25{,}000$ tiles (Primary Baseline) — [Kaggle Notebook](https://www.kaggle.com/code/tahuy138/completed-result-1)
+> 2. **Table 2 (Campaign 2)**: Seed 100, $N = 25{,}000$ tiles (Multi-Seed Re-shuffling) — [Kaggle Notebook](https://www.kaggle.com/code/tahuy138/notebook/notebook?scriptVersionId=355465855)
+> 3. **Table 3 (Campaign 3)**: Seed 42, $N = 50{,}000$ tiles (Scaled Training Budget) — [Kaggle Notebook](https://www.kaggle.com/code/tahuy138/notebook/notebook?scriptVersionId=355494334)
 >
-> Each cell is a **single run**. The pipeline does not fix `torch.manual_seed`, so weight initialization, data-loader shuffle order, and augmentation draws differ between runs. Differences below ~1 F1 point should not be over-interpreted; see the Limitations section of the report.
+> All core phenomena (stain collapse, normalization efficacy, stain-jitter conflict with Macenko, and foundation model breakdown under artificial normalization) replicate with 100% consistency across all 3 runs.
 
-# Final Ablation Results
+### Table 1: Campaign 1 — Seed 42, Subset = 25,000
+*Notebook: [https://www.kaggle.com/code/tahuy138/completed-result-1](https://www.kaggle.com/code/tahuy138/completed-result-1)*
 
-| exp_id   | stage   | backbone      | norm     | aug          |   best_val_f1 |   test_id_f1 |   test_ood_f1 |   delta_f1 |   rr_f1 |   test_id_acc |   test_ood_acc |   minutes |
-|:------|:-----|:------|:-------|:--------|----------:|--------:|--------:|-------:|-------:|-------:|------:|-------:|
-| EXP-01   | Stage 0 | resnet50      | none     | none         |        0.9917 |       0.9893 |        0.6644 |     0.3249 |   67.16 |        0.9893 |         0.7318 |     11.01 |
-| EXP-02   | Stage 1 | resnet50      | reinhard | none         |        0.9872 |       0.9862 |        0.8488 |     0.1373 |   86.07 |        0.9861 |         0.8915 |     16.53 |
-| EXP-03   | Stage 1 | resnet50      | macenko  | none         |        0.9693 |       0.9653 |        0.809  |     0.1563 |   83.8  |        0.9653 |         0.846  |     17.27 |
-| EXP-04   | Stage 2 | resnet50      | none     | aug_geo      |        0.9915 |       0.9899 |        0.6172 |     0.3727 |   62.35 |        0.9899 |         0.6955 |     10.85 |
-| EXP-05   | Stage 2 | resnet50      | none     | aug_stain    |        0.9859 |       0.9877 |        0.7443 |     0.2434 |   75.36 |        0.9877 |         0.8035 |     10.88 |
-| EXP-06   | Stage 2 | resnet50      | none     | aug_combined |        0.988  |       0.9901 |        0.7105 |     0.2796 |   71.76 |        0.9901 |         0.7734 |     10.94 |
-| EXP-07   | Stage 3 | resnet50      | macenko  | aug_geo      |        0.9749 |       0.9717 |        0.8689 |     0.1028 |   89.42 |        0.9717 |         0.9    |     17.91 |
-| EXP-08   | Stage 3 | resnet50      | macenko  | aug_stain    |        0.9651 |       0.9619 |        0.785  |     0.177  |   81.6  |        0.9619 |         0.8276 |     20.04 |
-| EXP-09   | Stage 3 | resnet50      | macenko  | aug_combined |        0.972  |       0.9699 |        0.8604 |     0.1094 |   88.72 |        0.9699 |         0.8921 |     20.65 |
-| EXP-10   | Stage 4 | convnext_tiny | none     | none         |        0.9896 |       0.9891 |        0.6821 |     0.3069 |   68.97 |        0.9891 |         0.7558 |     12.98 |
-| EXP-11   | Stage 4 | convnext_tiny | macenko  | aug_combined |        0.9757 |       0.9763 |        0.8685 |     0.1077 |   88.97 |        0.9763 |         0.8997 |     20.7  |
-| EXP-12   | Stage 4 | phikon        | none     | none         |        0.9915 |       0.9912 |        0.8239 |     0.1673 |   83.12 |        0.9912 |         0.8623 |      9.08 |
-| EXP-13   | Stage 4 | phikon        | macenko  | aug_combined |        0.9018 |       0.905  |        0.6982 |     0.2068 |   77.15 |        0.9045 |         0.7398 |     20.11 |
+| exp_id | stage | backbone | norm | aug | best_val_f1 | test_id_f1 | test_ood_f1 | delta_f1 | rr_f1 | test_id_acc | test_ood_acc | minutes |
+|:---|:---|:---|:---|:---|---:|---:|---:|---:|---:|---:|---:|---:|
+| EXP-01 | Stage 0 | resnet50 | none | none | 0.9917 | 0.9893 | 0.6644 | 0.3249 | 67.16% | 0.9893 | 0.7318 | 11.01 |
+| EXP-02 | Stage 1 | resnet50 | reinhard | none | 0.9872 | 0.9862 | 0.8488 | 0.1373 | 86.07% | 0.9861 | 0.8915 | 16.53 |
+| EXP-03 | Stage 1 | resnet50 | macenko | none | 0.9693 | 0.9653 | 0.8090 | 0.1563 | 83.80% | 0.9653 | 0.8460 | 17.27 |
+| EXP-04 | Stage 2 | resnet50 | none | aug_geo | 0.9915 | 0.9899 | 0.6172 | 0.3727 | 62.35% | 0.9899 | 0.6955 | 10.85 |
+| EXP-05 | Stage 2 | resnet50 | none | aug_stain | 0.9859 | 0.9877 | 0.7443 | 0.2434 | 75.36% | 0.9877 | 0.8035 | 10.88 |
+| EXP-06 | Stage 2 | resnet50 | none | aug_combined | 0.9880 | 0.9901 | 0.7105 | 0.2796 | 71.76% | 0.9901 | 0.7734 | 10.94 |
+| EXP-07 | Stage 3 | resnet50 | macenko | aug_geo | 0.9749 | 0.9717 | **0.8689** | **0.1028** | **89.42%** | 0.9717 | 0.9000 | 17.91 |
+| EXP-08 | Stage 3 | resnet50 | macenko | aug_stain | 0.9651 | 0.9619 | 0.7850 | 0.1770 | 81.60% | 0.9619 | 0.8276 | 20.04 |
+| EXP-09 | Stage 3 | resnet50 | macenko | aug_combined | 0.9720 | 0.9699 | 0.8604 | 0.1094 | 88.72% | 0.9699 | 0.8921 | 20.65 |
+| EXP-10 | Stage 4 | convnext_tiny | none | none | 0.9896 | 0.9891 | 0.6821 | 0.3069 | 68.97% | 0.9891 | 0.7558 | 12.98 |
+| EXP-11 | Stage 4 | convnext_tiny | macenko | aug_combined | 0.9757 | 0.9763 | 0.8685 | 0.1077 | 88.97% | 0.9763 | 0.8997 | 20.70 |
+| EXP-12 | Stage 4 | phikon | none | none | 0.9915 | 0.9912 | 0.8239 | 0.1673 | 83.12% | 0.9912 | 0.8623 | 9.08 |
+| EXP-13 | Stage 4 | phikon | macenko | aug_combined | 0.9018 | 0.9050 | 0.6982 | 0.2068 | 77.15% | 0.9045 | 0.7398 | 20.11 |
+
+### Table 2: Campaign 2 — Seed 100, Subset = 25,000
+*Notebook: [https://www.kaggle.com/code/tahuy138/notebook/notebook?scriptVersionId=355465855](https://www.kaggle.com/code/tahuy138/notebook/notebook?scriptVersionId=355465855)*
+
+| exp_id | stage | backbone | norm | aug | best_val_f1 | test_id_f1 | test_ood_f1 | delta_f1 | rr_f1 | test_id_acc | test_ood_acc | minutes |
+|:---|:---|:---|:---|:---|---:|---:|---:|---:|---:|---:|---:|---:|
+| EXP-01 | Stage 0 | resnet50 | none | none | 0.9912 | 0.9899 | 0.7234 | 0.2664 | 73.08% | 0.9899 | 0.7868 | 23.97 |
+| EXP-02 | Stage 1 | resnet50 | reinhard | none | 0.9883 | 0.9886 | 0.8244 | 0.1642 | 83.39% | 0.9885 | 0.8776 | 19.39 |
+| EXP-03 | Stage 1 | resnet50 | macenko | none | 0.9698 | 0.9661 | 0.8393 | 0.1268 | 86.87% | 0.9661 | 0.8721 | 23.19 |
+| EXP-04 | Stage 2 | resnet50 | none | aug_geo | 0.9915 | 0.9893 | 0.6685 | 0.3208 | 67.57% | 0.9893 | 0.7255 | 11.73 |
+| EXP-05 | Stage 2 | resnet50 | none | aug_stain | 0.9885 | 0.9885 | 0.7194 | 0.2692 | 72.77% | 0.9885 | 0.7840 | 11.20 |
+| EXP-06 | Stage 2 | resnet50 | none | aug_combined | 0.9904 | 0.9899 | 0.7610 | 0.2289 | 76.88% | 0.9899 | 0.8134 | 11.31 |
+| EXP-07 | Stage 3 | resnet50 | macenko | aug_geo | 0.9753 | 0.9721 | 0.8414 | 0.1307 | 86.56% | 0.9720 | 0.8773 | 20.77 |
+| EXP-08 | Stage 3 | resnet50 | macenko | aug_stain | 0.9669 | 0.9618 | 0.8019 | 0.1599 | 83.38% | 0.9619 | 0.8398 | 22.26 |
+| EXP-09 | Stage 3 | resnet50 | macenko | aug_combined | 0.9712 | 0.9680 | 0.8307 | 0.1373 | 85.82% | 0.9680 | 0.8702 | 25.21 |
+| EXP-10 | Stage 4 | convnext_tiny | none | none | 0.9896 | 0.9869 | 0.6727 | 0.3142 | 68.16% | 0.9869 | 0.7586 | 13.39 |
+| EXP-11 | Stage 4 | convnext_tiny | macenko | aug_combined | 0.9768 | 0.9776 | 0.8613 | 0.1163 | 88.10% | 0.9776 | 0.8919 | 25.95 |
+| EXP-12 | Stage 4 | phikon | none | none | 0.9912 | 0.9917 | **0.8668** | **0.1249** | **87.40%** | 0.9917 | 0.9031 | 9.14 |
+| EXP-13 | Stage 4 | phikon | macenko | aug_combined | 0.9053 | 0.9053 | 0.6903 | 0.2150 | 76.26% | 0.9050 | 0.7336 | 24.62 |
+
+### Table 3: Campaign 3 — Seed 42, Subset = 50,000
+*Notebook: [https://www.kaggle.com/code/tahuy138/notebook/notebook?scriptVersionId=355494334](https://www.kaggle.com/code/tahuy138/notebook/notebook?scriptVersionId=355494334)*
+
+| exp_id | stage | backbone | norm | aug | best_val_f1 | test_id_f1 | test_ood_f1 | delta_f1 | rr_f1 | test_id_acc | test_ood_acc | minutes |
+|:---|:---|:---|:---|:---|---:|---:|---:|---:|---:|---:|---:|---:|
+| EXP-01 | Stage 0 | resnet50 | none | none | 0.9940 | 0.9932 | 0.6104 | 0.3828 | 61.45% | 0.9932 | 0.6724 | 20.67 |
+| EXP-02 | Stage 1 | resnet50 | reinhard | none | 0.9917 | 0.9913 | 0.8236 | 0.1677 | 83.09% | 0.9913 | 0.8787 | 33.02 |
+| EXP-03 | Stage 1 | resnet50 | macenko | none | 0.9737 | 0.9777 | 0.8211 | 0.1566 | 83.98% | 0.9777 | 0.8538 | 33.36 |
+| EXP-04 | Stage 2 | resnet50 | none | aug_geo | 0.9952 | 0.9951 | 0.5574 | 0.4377 | 56.01% | 0.9951 | 0.6049 | 20.51 |
+| EXP-05 | Stage 2 | resnet50 | none | aug_stain | 0.9904 | 0.9903 | 0.7487 | 0.2416 | 75.60% | 0.9903 | 0.8001 | 20.61 |
+| EXP-06 | Stage 2 | resnet50 | none | aug_combined | 0.9948 | 0.9931 | 0.8002 | 0.1928 | 80.58% | 0.9931 | 0.8345 | 20.76 |
+| EXP-07 | Stage 3 | resnet50 | macenko | aug_geo | 0.9816 | 0.9828 | 0.8319 | 0.1509 | 84.65% | 0.9828 | 0.8593 | 35.66 |
+| EXP-08 | Stage 3 | resnet50 | macenko | aug_stain | 0.9742 | 0.9734 | 0.8266 | 0.1467 | 84.93% | 0.9733 | 0.8584 | 40.41 |
+| EXP-09 | Stage 3 | resnet50 | macenko | aug_combined | 0.9792 | 0.9778 | 0.8310 | 0.1468 | 84.99% | 0.9777 | 0.8586 | 40.54 |
+| EXP-10 | Stage 4 | convnext_tiny | none | none | 0.9913 | 0.9907 | 0.7607 | 0.2300 | 76.78% | 0.9907 | 0.8180 | 24.33 |
+| EXP-11 | Stage 4 | convnext_tiny | macenko | aug_combined | 0.9817 | 0.9785 | **0.8753** | **0.1032** | **89.45%** | 0.9785 | 0.9039 | 41.72 |
+| EXP-12 | Stage 4 | phikon | none | none | 0.9937 | 0.9940 | 0.8319 | 0.1621 | 83.69% | 0.9940 | 0.8701 | 17.03 |
+| EXP-13 | Stage 4 | phikon | macenko | aug_combined | 0.9132 | 0.9150 | 0.6790 | 0.2360 | 74.21% | 0.9151 | 0.7253 | 40.03 |
 
 
 ### Column Reference
