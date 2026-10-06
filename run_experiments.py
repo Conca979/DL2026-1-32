@@ -16,7 +16,7 @@ CLASSES = ["ADI", "BACK", "DEB", "LYM", "MUC", "MUS", "NORM", "STR", "TUM"]
 CLASS_TO_IDX = {name: i for i, name in enumerate(CLASSES)}
 NUM_CLASSES = len(CLASSES)
 
-IMAGENET_MEAN = [0.485, 0.456, 0.406]
+IMAGENET_MEAN = [0.485, 0.456, 0.406] # https://github.com/pytorch/vision/issues/1439
 IMAGENET_STD = [0.229, 0.224, 0.225]
 
 EXPERIMENTS: List[Dict[str, str]] = [
@@ -47,7 +47,7 @@ _LMS_MAT = np.array([
   [0.3811, 0.5783, 0.0402],
   [0.1967, 0.7244, 0.0782],
   [0.0241, 0.1288, 0.8444],
-], dtype=np.float64)
+], dtype=np.float64)  #https://home.cis.rit.edu/~cnspci/references/dip/color_transfer/reinhard2001.pdf
 
 _LAB_MAT = np.array([
   [1.0 / np.sqrt(3.0),  1.0 / np.sqrt(3.0),  1.0 / np.sqrt(3.0)],
@@ -283,7 +283,7 @@ def find_class_images(base_dir: Path, class_name: str) -> List[Path]:
 
 
 def prepare_dataset_splits(
-  source_dir: Path, target_dir: Path, out_dir: Path, subset_size: int = 25000, seed: int = 42
+  source_dir: Path, target_dir: Path, out_dir: Path, subset_size: int = 25000, seed: int = 100
 ) -> Tuple[Dict[str, pd.DataFrame], Path]:
   """Generate 70/15/15 stratified source splits and pick canonical reference tile."""
   out_dir.mkdir(parents=True, exist_ok=True)
@@ -451,9 +451,9 @@ def train_experiment(
   test_ood_loader = DataLoader(test_ood_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers)
 
   model = build_model(exp["backbone"]).to(device)
-  optimizer = torch.optim.AdamW(model.parameters(), lr=lr if exp["backbone"] != "phikon" else 3e-4, weight_decay=0.05)
-  scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs * len(train_loader), eta_min=1e-5)
-  criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
+  optimizer = torch.optim.AdamW(model.parameters(), lr=lr if exp["backbone"] != "phikon" else 3e-4, weight_decay=0.05) #https://arxiv.org/pdf/1711.05101
+  scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs * len(train_loader), eta_min=1e-5) #https://arxiv.org/pdf/1608.03983
+  criterion = nn.CrossEntropyLoss(label_smoothing=0.1) #Kỹ thuật Regularization Label Smoothing (Szegedy et al., 2016)
   scaler = torch.amp.GradScaler("cuda")
 
   best_val_f1 = -1.0
