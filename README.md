@@ -20,7 +20,7 @@ Macro-F1 on the held-out in-domain test split (`ID`) and the external hospital c
 | Best foundation model (Phikon, undefended) | EXP-12 | 0.9912 | 0.8239 | 0.1673 | 83.1% |
 | Phikon + full defense | EXP-13 | 0.9050 | 0.6982 | 0.2068 | 77.2% |
 
-Three findings drive the study: stain normalization recovers most of the lost robustness (+18 F1 points), augmentation is largely **redundant once normalization is applied**, and a frozen histology foundation encoder — the strongest single model when undefended — is the one configuration that defenses **actively break**. Full numbers in [`results/summary_results.csv`](results/summary_results.csv).
+Three findings drive the study: stain normalization recovers most of the lost robustness (+18 F1 points), augmentation is largely **redundant once normalization is applied**, and a frozen histology foundation encoder — the strongest single model when undefended — is the one configuration that defenses **actively break**. Full numbers in [`resultss/1_RESULTS_TABLE.md`](results/1_RESULTS_TABLE.md).
 
 ---
 
