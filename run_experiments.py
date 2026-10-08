@@ -1,24 +1,25 @@
 from __future__ import annotations
 
-import argparse
-import copy
+import argparse  #thư viện để nhận tham số dòng lệnh từ terminal
+import copy # Dùng hàm copy.deepcopy() để sao chép trọng số mô hình tốt nhất (state_dict) vào bộ nhớ RAM mà không bị ghi đè.
 import os
 import random
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
-import numpy as np
-import pandas as pd
-from PIL import Image
+import numpy as np #sử lí mảng số học nhiều chiều
+import pandas as pd #thư viện giúp xử lý dữ liệu dạng bảng, thường dùng để lưu kết quả dưới dạng CSV hoặc DataFrame dễ đọc
+from PIL import Image # Thư viện xử lý ảnh cơ bản
 
 CLASSES = ["ADI", "BACK", "DEB", "LYM", "MUC", "MUS", "NORM", "STR", "TUM"]
-CLASS_TO_IDX = {name: i for i, name in enumerate(CLASSES)}
+CLASS_TO_IDX = {name: i for i, name in enumerate(CLASSES)} #enumerate() để duyệt qua danh sách và lấy ra chỉ số (index)
 NUM_CLASSES = len(CLASSES)
 
-IMAGENET_MEAN = [0.485, 0.456, 0.406] # https://github.com/pytorch/vision/issues/1439
-IMAGENET_STD = [0.229, 0.224, 0.225]
-
+IMAGENET_MEAN = [0.485, 0.456, 0.406] # trung bình của ảnh train
+IMAGENET_STD = [0.229, 0.224, 0.225] #độ lệch chuẩn của ảnh train
+#giúp: Ổn định thuật toán tối ưu (Gradient Descent)
+      #Tương thích với mô hình Pre-trained: Đa số các mô hình hiện đại (như ResNet, EfficientNet) đều được huấn luyện trước (pre-trained) trên tập dữ liệu ImageNet. Nếu không chuẩn hóa, mô hình sẽ khó học từ trọng số có sẵn.
 EXPERIMENTS: List[Dict[str, str]] = [
   # Stage 0: Anchor Baseline
   {"id": "EXP-01", "stage": "Stage 0", "backbone": "resnet50",      "norm": "none",     "aug": "none",        "notes": "Raw baseline"},
@@ -47,7 +48,7 @@ _LMS_MAT = np.array([
   [0.3811, 0.5783, 0.0402],
   [0.1967, 0.7244, 0.0782],
   [0.0241, 0.1288, 0.8444],
-], dtype=np.float64)  #https://home.cis.rit.edu/~cnspci/references/dip/color_transfer/reinhard2001.pdf
+], dtype=np.float64)
 
 _LAB_MAT = np.array([
   [1.0 / np.sqrt(3.0),  1.0 / np.sqrt(3.0),  1.0 / np.sqrt(3.0)],
@@ -61,14 +62,14 @@ _INV_LAB_MAT = np.array([
   [1.0 / np.sqrt(3.0), -2.0 / np.sqrt(6.0),  0.0],
 ], dtype=np.float64)
 
-_INV_LMS_MAT = np.linalg.inv(_LMS_MAT)
+_INV_LMS_MAT = np.linalg.inv(_LMS_MAT) # lệnh này để tính ma trận nghịch đảo của _LMS_MAT
 
 
 def _rgb_to_lab(rgb: np.ndarray) -> np.ndarray:
   norm_rgb = np.clip(rgb.astype(np.float64) / 255.0, 1e-4, 1.0)
-  lms = norm_rgb @ _LMS_MAT.T
+  lms = norm_rgb @ _LMS_MAT.T  #để biến đổi ảnh từ không gian màu RGB sang không gian màu LMS (Lightness, Medium, Strong)
   log_lms = np.log10(np.clip(lms, 1e-4, None))
-  return log_lms @ _LAB_MAT.T
+  return log_lms @ _LAB_MAT.T #kết quả trả về là không gian màu LAB
 
 
 def _lab_to_rgb(lab: np.ndarray) -> np.ndarray:
@@ -102,28 +103,28 @@ def reinhard_apply(image_rgb: np.ndarray, ref_stats: Dict[str, np.ndarray]) -> n
 
 def macenko_fit(reference_rgb: np.ndarray, od_threshold: float = 0.15) -> Dict[str, np.ndarray]:
   """Estimate H&E stain vectors and 99th percentile concentrations from reference tile."""
-  od = -np.log10((reference_rgb.astype(np.float64) + 1.0) / 256.0)
-  flat_od = od.reshape(-1, 3)
-  mask = np.linalg.norm(flat_od, axis=1) > od_threshold
+  od = -np.log10((reference_rgb.astype(np.float64) + 1.0) / 256.0) #chuyển đổi RGB sang OD bằng định luật Beer-Lambert
+  flat_od = od.reshape(-1, 3) #đưa ảnh về dạng 2 chiều
+  mask = np.linalg.norm(flat_od, axis=1) > od_threshold #lọc bỏ các pixel không có màu
   flat_od = flat_od[mask]
 
-  _, _, vh = np.linalg.svd(flat_od, full_matrices=False)
+  _, _, vh = np.linalg.svd(flat_od, full_matrices=False) 
   proj = flat_od @ vh[:2].T
   phi = np.arctan2(proj[:, 1], proj[:, 0])
 
-  min_phi = np.percentile(phi, 1.0)
-  max_phi = np.percentile(phi, 99.0)
+  min_phi = np.percentile(phi, 1.0) #dùng percentile để lọc bỏ các giá trị ngoại lai ở bên trái, chỉ giữ lại 99% dữ liệu
+  max_phi = np.percentile(phi, 99.0) #dùng percentile để lọc bỏ các giá trị ngoại lai ở bên phải, chỉ giữ lại 99% dữ liệu
 
   v1 = vh[:2].T @ np.array([np.cos(min_phi), np.sin(min_phi)])
-  v2 = vh[:2].T @ np.array([np.cos(max_phi), np.sin(max_phi)])
+  v2 = vh[:2].T @ np.array([np.cos(max_phi), np.sin(max_phi)]) 
 
   # Ensure Hematoxylin is column 0 (stronger in red absorption)
   if v1[0] < v2[0]:
     v1, v2 = v2, v1
 
   stain_matrix = np.column_stack([v1 / np.linalg.norm(v1), v2 / np.linalg.norm(v2)])
-  concentrations = flat_od @ np.linalg.pinv(stain_matrix).T
-  q99 = np.percentile(concentrations, 99.0, axis=0)
+  concentrations = flat_od @ np.linalg.pinv(stain_matrix).T #để tính nồng độ HEMATOXYLIN và EOSIN bằng cách Màu thực tế x Ma trận màu
+  q99 = np.percentile(concentrations, 99.0, axis=0) 
 
   return {"stain_matrix": stain_matrix, "q99": q99}
 
@@ -170,7 +171,7 @@ HE_STAIN_MATRIX = np.array([
   [0.704, 0.990],
   [0.286, 0.105],
 ], dtype=np.float64)
-HE_STAIN_MATRIX /= np.linalg.norm(HE_STAIN_MATRIX, axis=0, keepdims=True)
+HE_STAIN_MATRIX /= np.linalg.norm(HE_STAIN_MATRIX, axis=0, keepdims=True) #keepdims=True lệnh này để giữ nguyên cấu trúc 2 chiều
 
 
 def hed_stain_jitter(image_rgb: np.ndarray, sigma: float = 0.2, bias: float = 0.05) -> np.ndarray:
@@ -253,14 +254,14 @@ def find_class_images(base_dir: Path, class_name: str) -> List[Path]:
   if (base_dir / class_name).is_dir():
     c_folder = base_dir / class_name
   else:
-    for child in base_dir.iterdir():
+    for child in base_dir.iterdir(): #lật từng thư mục con lên
       if child.is_dir() and child.name.upper() == class_name.upper():
         c_folder = child
         break
 
   # 2. Search recursively across subdirectories if not found directly
   if c_folder is None:
-    for child in base_dir.rglob("*"):
+    for child in base_dir.rglob("*"): #rglob for finding files recursively deeper inside directory
       if child.is_dir() and child.name.upper() == class_name.upper():
         c_folder = child
         break
@@ -283,21 +284,21 @@ def find_class_images(base_dir: Path, class_name: str) -> List[Path]:
 
 
 def prepare_dataset_splits(
-  source_dir: Path, target_dir: Path, out_dir: Path, subset_size: int = 25000, seed: int = 100
+  source_dir: Path, target_dir: Path, out_dir: Path, subset_size: int = 25000, seed: int = 42
 ) -> Tuple[Dict[str, pd.DataFrame], Path]:
   """Generate 70/15/15 stratified source splits and pick canonical reference tile."""
   out_dir.mkdir(parents=True, exist_ok=True)
-  np.random.seed(seed)
+  np.random.seed(seed) # dòng này là để một chuỗi số ngẫu nhiên được lặp lại ở các lần sau
   random.seed(seed)
 
   # Collect source domain patches
   source_records = []
-  for c_idx, c_name in enumerate(CLASSES):
+  for c_idx, c_name in enumerate(CLASSES): #enumerate() for adding a counter to an iterable and returns it
     c_images = find_class_images(source_dir, c_name)
     for p in c_images:
       source_records.append({"image_path": str(p), "class_name": c_name, "label_idx": c_idx, "domain": "source"})
 
-  source_df = pd.DataFrame(source_records)
+  source_df = pd.DataFrame(source_records)  #chuyển sang dữ liệu bảng
   if len(source_df) == 0:
     items = [p.name for p in list(source_dir.iterdir())[:15]] if source_dir.is_dir() else "directory does not exist"
     raise RuntimeError(
@@ -451,9 +452,28 @@ def train_experiment(
   test_ood_loader = DataLoader(test_ood_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers)
 
   model = build_model(exp["backbone"]).to(device)
-  optimizer = torch.optim.AdamW(model.parameters(), lr=lr if exp["backbone"] != "phikon" else 3e-4, weight_decay=0.05) #https://arxiv.org/pdf/1711.05101
-  scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs * len(train_loader), eta_min=1e-5) #https://arxiv.org/pdf/1608.03983
-  criterion = nn.CrossEntropyLoss(label_smoothing=0.1) #Kỹ thuật Regularization Label Smoothing (Szegedy et al., 2016)
+
+  # 1. OPTIMIZER (Thuật toán tối ưu trọng số):
+  # - Dùng AdamW (Adam kết hợp tách biệt Weight Decay): Chuẩn hiện đại giúp chống overfitting tốt hơn Adam thường.
+  # - Learning rate (lr): Nếu là backbone CNN (ResNet, ConvNeXt) thì dùng lr=1e-3; nếu là Phikon (chỉ train linear head 1 lớp) thì dùng lr=3e-4 để hội tụ ổn định, tránh nhảy bước quá lớn.
+  # - weight_decay=0.05: Phạt các trọng số có độ lớn quá lớn để ép mô hình học đặc trưng tổng quát.
+  optimizer = torch.optim.AdamW(model.parameters(), lr=lr if exp["backbone"] != "phikon" else 3e-4, weight_decay=0.05)
+
+  # 2. SCHEDULER (Bộ điều chỉnh tốc độ học theo thời gian):
+  # - CosineAnnealingLR: Giảm dần learning rate theo đồ thị hình sóng Cosine từ cực đại xuống cực tiểu (eta_min=1e-5).
+  # - T_max = epochs * len(train_loader): Tổng số bước cập nhật (iterations) trong toàn bộ quá trình train.
+  # - Tác dụng: Giúp mô hình học nhanh ở các epoch đầu và tinh chỉnh chậm rãi, hội tụ mượt mà ở các epoch cuối.
+  scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs * len(train_loader), eta_min=1e-5)
+
+  # 3. CRITERION (Hàm mất mát / Loss function):
+  # - CrossEntropyLoss: Hàm mất mát chuẩn mực cho bài toán phân loại 9 lớp mô học.
+  # - label_smoothing=0.1: Kỹ thuật làm mịn nhãn (phân phối xác suất mục tiêu thay vì one-hot 100% tuyệt đối).
+  # - Tác dụng: Ngăn mô hình bị "tự tin thái quá" (overconfident) vào màu sắc của tập train, tăng khả năng bền vững khi gặp màu lạ ở tập OOD.
+  criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
+
+  # 4. GRAD SCALER (Bộ co giãn Gradient cho Mixed Precision Training):
+  # - Tự động phóng to gradient khi tính toán với số thực 16-bit (FP16) trong torch.amp.autocast("cuda").
+  # - Tác dụng: Ngăn hiện tượng triệt tiêu số (underflow) do FP16 không biểu diễn được số cực nhỏ, giúp train nhanh gấp đôi và tiết kiệm 50% VRAM GPU.
   scaler = torch.amp.GradScaler("cuda")
 
   best_val_f1 = -1.0
@@ -533,6 +553,13 @@ def main():
     wanted = set(args.experiments)
     exp_list = [e for e in exp_list if e["id"] in wanted]
 
+  # CHẾ ĐỘ DRY-RUN (Chạy thử nghiệm mô phỏng / Kiểm tra kế hoạch):
+  # - Nếu người dùng truyền cờ `--dry-run` từ dòng lệnh (ví dụ: `python run_experiments.py --dry-run`):
+  # - Mục đích: In ra toàn bộ kế hoạch thực nghiệm (tên mô hình, phương pháp chuẩn hóa, augmentation, số epoch, batch size)
+  #   để người dùng rà soát trước mà KHÔNG thực sự nạp dữ liệu hay huấn luyện tốn tài nguyên GPU.
+  # - Kỹ thuật định dạng: Dùng f-string với cú pháp căn lề trái như `{e['backbone']:<13}` (chiều rộng 13 ký tự) 
+  #   để bảng danh sách in ra màn hình terminal thẳng hàng, ngay ngắn và trực quan.
+  # - Lệnh `return`: Lập tức thoát khỏi chương trình trong < 1 giây, hoàn tất việc kiểm tra an toàn.
   if args.dry_run:
     print(f"Plan: {len(exp_list)} experiments queued (subset={args.subset}, epochs={args.epochs}, batch={args.batch_size})")
     for e in exp_list:
