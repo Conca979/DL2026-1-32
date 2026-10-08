@@ -129,9 +129,11 @@ flowchart TD
 
 ---
 
-## 5. MỔ XẺ CHI TIẾT TỪNG DÒNG CODE TRONG `run_experiments.py`
+## 5. MỔ XẺ CHI TIẾT TỪNG DÒNG CODE TRONG `run_experiments.py` & BẢNG TRA CỨU CON SỐ MA THUẬT
 
-Phần này đi qua từng khối code trong [`run_experiments.py`](file:///D:/LT/DL2026-1-32/run_experiments.py), giải thích chi tiết chức năng, ý nghĩa toán học và lâm sàng từng dòng:
+Phần này đi qua từng khối mã nguồn trong [`run_experiments.py`](file:///D:/LT/DL2026-1-32/run_experiments.py), giải thích chi tiết mục đích, ý nghĩa lâm sàng, cơ sở toán học/vật lý của từng dòng lệnh và từng công thức, kèm theo **Bảng tra cứu các con số ma thuật (Magic Numbers Encyclopedia)** để bạn nắm chắc 100% bản chất khi trả lời phản biện.
+
+---
 
 ### 5.1. Khối 1: Khai báo thư viện, Hằng số & Ma trận Thực nghiệm (Dòng 1 – 43)
 
@@ -143,12 +145,15 @@ from typing import Any, Dict, List, Tuple
 import numpy as np, pandas as pd
 from PIL import Image
 ```
-- `from __future__ import annotations`: Cho phép dùng type hint hiện đại mà không bị lỗi trên các bản Python cũ.
-- `argparse`: Phân tích tham số dòng lệnh CLI (`--data-root`, `--epochs`, `--batch-size`,...).
-- `copy`: Cung cấp `copy.deepcopy()` để sao chép độc lập toàn bộ trọng số mô hình tốt nhất (`state_dict`).
-- `random`, `np`: Khởi tạo và đồng bộ hạt giống ngẫu nhiên (`seed=100`) nhằm bảo đảm tính tái lập kết quả.
-- `Path`: Thao tác đường dẫn an toàn trên cả Windows (`\`) và Linux (`/`).
-- `Image`: Đọc và lưu trữ ảnh định dạng RGB 8-bit.
+
+#### 📌 Giải thích mục đích từng thư viện:
+- `from __future__ import annotations`: Cho phép biểu diễn kiểu dữ liệu lồng nhau (type hinting) ở thì tương lai mà không bị lỗi trên các phiên bản Python cũ (trước 3.10).
+- `argparse`: Phân tích các tham số dòng lệnh từ Terminal (ví dụ `--data-root`, `--epochs 8`, `--batch-size 64`).
+- `copy`: Cung cấp hàm `copy.deepcopy()` để sao chép độc lập toàn bộ bảng trọng số `state_dict` của mô hình tốt nhất vào bộ nhớ RAM, tách rời hoàn toàn khỏi mô hình đang tiếp tục huấn luyện trên GPU.
+- `os`, `Path`: Thao tác với hệ thống tệp tin. `pathlib.Path` là chuẩn mực hiện đại giúp code tự động tương thích dấu gạch chéo xuôi `/` (Linux/Kaggle) và gạch chéo ngược `\` (Windows).
+- `random`, `np`: Cung cấp các hàm tạo số ngẫu nhiên. Bắt buộc phải cố định hạt giống (`seed=100`) để các lần chạy cho ra kết quả đồng nhất.
+- `pd (pandas)`: Quản lý danh sách ảnh, tạo bảng DataFrame chứa đường dẫn và nhãn, hỗ trợ hàm lấy mẫu phân tầng.
+- `Image (PIL)`: Thư viện đọc và ghi ảnh tiêu chuẩn trong thị giác máy tính, đảm bảo tải đúng mảng màu RGB 8-bit.
 
 ```python
 CLASSES = ["ADI", "BACK", "DEB", "LYM", "MUC", "MUS", "NORM", "STR", "TUM"]
@@ -157,19 +162,68 @@ NUM_CLASSES = len(CLASSES)
 IMAGENET_MEAN = [0.485, 0.456, 0.406]
 IMAGENET_STD = [0.229, 0.224, 0.225]
 ```
-- `CLASSES`: Danh sách 9 lớp mô học theo đúng thứ tự nhãn trong tập dữ liệu chuẩn Kather.
-- `CLASS_TO_IDX`: Tạo bảng tra cứu nhãn dạng chuỗi sang số nguyên $0 \dots 8$.
-- `IMAGENET_MEAN`, `IMAGENET_STD`: Giá trị trung bình và độ lệch chuẩn của 1 triệu ảnh ImageNet trên 3 kênh R-G-B. Mọi backbone tiền huấn luyện (ResNet, ConvNeXt) đều yêu cầu chuẩn hóa Z-score theo thông số này: $X_{\text{norm}} = \frac{X - \mu}{\sigma}$.
+
+#### 📌 Bản chất sinh học của 9 lớp mô bệnh học (`CLASSES`):
+1. **`ADI` (Adipose - Mô mỡ)**: Các tế bào mỡ kích thước lớn, bào tương trong suốt rỗng do lipid bị hòa tan trong cồn khi xử lý tiêu bản.
+2. **`BACK` (Background - Nền kính)**: Vùng kính trắng trong suốt hoặc chứa chất gắn lam kính, không có tế bào sinh học.
+3. **`DEB` (Debris - Mảnh vụn hoại tử)**: Xác tế bào chết vỡ vụn, hạt chất lắng đọng không có cấu trúc sống.
+4. **`LYM` (Lymphocytes - Tế bào lympho)**: Tế bào miễn dịch có nhân tròn nhỏ, đậm màu tím ngắt, màng bào tương rất mỏng. Sự hiện diện của lympho biểu thị phản ứng miễn dịch kháng u (TILs).
+5. **`MUC` (Mucus - Chất nhầy)**: Vùng dịch nhầy ngoại bào màu hồng nhạt/xanh lơ do biểu mô tuyến đại tràng tiết ra.
+6. **`MUS` (Muscle - Cơ trơn)**: Các bó sợi cơ trơn dài xếp song song, bắt màu hồng đậm của Eosin.
+7. **`NORM` (Normal Mucosa - Niêm mạc đại tràng lành tính)**: Tuyến Lieberkühn khỏe mạnh, các tế bào biểu mô hình trụ xếp trật tự, cực tính rõ ràng.
+8. **`STR` (Stroma - Mô đệm)**: Mô liên kết sợi, nguyên bào sợi và chất nền ngoại bào bao quanh các ổ ung thư.
+9. **`TUM` (Colorectal Adenocarcinoma Epithelium - Biểu mô ung thư biểu mô tuyến đại trực tràng)**: Tế bào u ác tính, nhân dị dạng to nhỏ không đều, tăng sắc tím Hematoxylin, mất phân cực, xâm lấn chất nền.
+
+#### 📌 Con số ma thuật: `IMAGENET_MEAN` và `IMAGENET_STD`:
+- **Công thức chuẩn hóa Z-score**:
+  $$X_{\text{norm}}^{(c)} = \frac{X^{(c)} - \mu_c}{\sigma_c}$$
+- **Nguồn gốc con số**:
+  - `IMAGENET_MEAN = [0.485, 0.456, 0.406]`
+  - `IMAGENET_STD = [0.229, 0.224, 0.225]`
+  Đây là giá trị trung bình ($\mu$) và độ lệch chuẩn ($\sigma$) của hơn 1.28 triệu bức ảnh trong tập dữ liệu ImageNet-1K được tính toán trên 3 kênh R, G, B.
+- **Tại sao ảnh mô học lại phải chuẩn hóa theo ImageNet?**
+  Các mạng nơ-ron ResNet-50 và ConvNeXt-Tiny được huấn luyện trước (pretrained) trên ImageNet. Trọng số của các lớp tích chập đầu tiên ($7 \times 7$ filters) đã học cách nhận diện biên cạnh và đường nét dựa trên giả định đầu vào có phân phối dữ liệu quanh trung bình 0 và phương sai 1 theo bộ số này. Nếu không chuẩn hóa bằng bộ số này, các phép kích hoạt nơ-ron sẽ bị lệch vùng làm việc tuyến tính, gây suy giảm độ chính xác ngay từ epoch đầu tiên.
+
+```python
+EXPERIMENT_CONFIGS = [
+    # STAGE 0: BASELINE (Khảo sát độ tụt dốc thô khi chuyển viện)
+    {"exp_id": "EXP-01", "stage": "Stage 0", "backbone": "resnet50", "norm": "none", "aug": "none", "desc": "Baseline mộc ResNet-50"},
+    # STAGE 1: STAIN NORMALIZATION (Phòng ngự bằng Chuẩn hóa màu)
+    {"exp_id": "EXP-02", "stage": "Stage 1", "backbone": "resnet50", "norm": "reinhard", "aug": "none", "desc": "Chuẩn hóa Reinhard"},
+    {"exp_id": "EXP-03", "stage": "Stage 1", "backbone": "resnet50", "norm": "macenko", "aug": "none", "desc": "Chuẩn hóa Macenko"},
+    # STAGE 2: DATA AUGMENTATION (Phòng ngự bằng Tăng cường dữ liệu)
+    {"exp_id": "EXP-04", "stage": "Stage 2", "backbone": "resnet50", "norm": "none", "aug": "aug_geo", "desc": "Tăng cường hình học (Lật + Xoay)"},
+    {"exp_id": "EXP-05", "stage": "Stage 2", "backbone": "resnet50", "norm": "none", "aug": "aug_stain", "desc": "Tăng cường màu sinh học (HED Jitter)"},
+    {"exp_id": "EXP-06", "stage": "Stage 2", "backbone": "resnet50", "norm": "none", "aug": "aug_combined", "desc": "Tăng cường kết hợp Geo + Stain"},
+    # STAGE 3: COMBINED DEFENSE (Phòng ngự kết hợp)
+    {"exp_id": "EXP-07", "stage": "Stage 3", "backbone": "resnet50", "norm": "macenko", "aug": "aug_geo", "desc": "Macenko + Aug-Geo (Cấu hình vô địch)"},
+    {"exp_id": "EXP-08", "stage": "Stage 3", "backbone": "resnet50", "norm": "macenko", "aug": "aug_combined", "desc": "Macenko + Aug-Combined (Nghịch lý bổ trợ)"},
+    {"exp_id": "EXP-09", "stage": "Stage 3", "backbone": "resnet50", "norm": "reinhard", "aug": "aug_geo", "desc": "Reinhard + Aug-Geo"},
+    # STAGE 4: ARCHITECTURE RESILIENCE (Độ kiên cường của Kiến trúc mô hình)
+    {"exp_id": "EXP-10", "stage": "Stage 4", "backbone": "convnext_tiny", "norm": "none", "aug": "none", "desc": "ConvNeXt-Tiny thô mộc"},
+    {"exp_id": "EXP-11", "stage": "Stage 4", "backbone": "convnext_tiny", "norm": "macenko", "aug": "aug_geo", "desc": "ConvNeXt-Tiny tối ưu"},
+    {"exp_id": "EXP-12", "stage": "Stage 4", "backbone": "phikon", "norm": "none", "aug": "none", "desc": "Phikon Foundation Model mộc"},
+    {"exp_id": "EXP-13", "stage": "Stage 4", "backbone": "phikon", "norm": "macenko", "aug": "aug_geo", "desc": "Phikon + Macenko + Aug-Geo"},
+]
+```
+- **Ý nghĩa thiết kế ma trận**: Thiết kế theo phương pháp **Nghiên cứu triệt tiêu (Ablation Study)** có kiểm soát biến số độc lập (Independent Variable) theo 5 giai đoạn rõ ràng:
+  - Giai đoạn 0: Mốc cơ sở (không phòng ngự).
+  - Giai đoạn 1: Cô lập tác động của Chuẩn hóa màu sắc (so sánh Reinhard vs Macenko).
+  - Giai đoạn 2: Cô lập tác động của Tăng cường dữ liệu (so sánh Hình học vs HED Jitter vs Cả hai).
+  - Giai đoạn 3: Khảo sát sự tương tác cộng hưởng giữa Chuẩn hóa và Tăng cường.
+  - Giai đoạn 4: Đánh giá độ kiên cường của các cấu trúc mạng hiện đại (CNN 2022 vs ViT Foundation Model 2023).
 
 ---
 
 ### 5.2. Khối 2: Chuẩn hóa màu thống kê Reinhard (Dòng 44 – 102)
 
-#### Cơ sở toán học:
-Mắt người có 3 loại tế bào nón cảm thụ ánh sáng: S (Short - Xanh lam), M (Medium - Xanh lục), L (Long - Đỏ). Năm 1998, Ruderman phát hiện rằng phản ứng của các tế bào nón có tính phi tuyến theo hàm logarit và tồn tại một hệ trục đối kháng không tương quan $L\alpha\beta$:
-- $L$: Kênh độ sáng phi sắc.
-- $\alpha$: Kênh đối kháng Đỏ - Lục.
-- $\beta$: Kênh đối kháng Vàng - Lam.
+#### 📌 Cơ sở lý thuyết & Sinh học thị giác:
+Mắt người cảm thụ màu sắc qua 3 loại tế bào nón trên võng mạc (S-Cone: ngắn/xanh lam, M-Cone: trung bình/xanh lục, L-Cone: dài/đỏ). Năm 1998, Ruderman phát hiện tín hiệu từ 3 loại tế bào nón này truyền lên não bộ sau khi qua phép biến đổi phi tuyến logarit sẽ hình thành 3 kênh tín hiệu đối kháng **không tương quan về mặt thống kê (Decorrelated)**:
+- Kênh $L$: Độ chói sáng (Luminance, không mang sắc thái).
+- Kênh $\alpha$: Trục đối kháng Đỏ - Lục (Red - Green).
+- Kênh $\beta$: Trục đối kháng Vàng - Lam (Yellow - Blue).
+
+Erik Reinhard (2001) đã ứng dụng phát hiện này để tạo ra thuật toán chuẩn hóa màu: Vì 3 kênh $L, \alpha, \beta$ hoàn toàn độc lập, ta có thể căn chỉnh phân phối thống kê (Mean và Std) trên từng kênh mà không làm biến dạng các kênh còn lại.
 
 ```python
 _LMS_MAT = np.array([
@@ -177,24 +231,32 @@ _LMS_MAT = np.array([
   [0.1967, 0.7244, 0.0782],
   [0.0241, 0.1288, 0.8444],
 ], dtype=np.float64)
+```
 
+#### 📌 Con số ma thuật: Ma trận `_LMS_MAT`:
+- Đây là ma trận chuyển đổi từ không gian màu sRGB sang không gian đáp ứng phổ nón võng mạc LMS:
+  $$\begin{bmatrix} L \\ M \\ S \end{bmatrix} = \begin{bmatrix} 0.3811 & 0.5783 & 0.0402 \\ 0.1967 & 0.7244 & 0.0782 \\ 0.0241 & 0.1288 & 0.8444 \end{bmatrix} \begin{bmatrix} R \\ G \\ B \end{bmatrix}$$
+- **Tại sao các con số này lại có giá trị như vậy?**
+  Các hệ số này bắt nguồn từ tích phân chập giữa đường cong nhạy cảm quang phổ của 3 loại sắc tố tế bào nón người (phổ độ nhạy đỉnh: L ở 564 nm, M ở 534 nm, S ở 420 nm) với các đỉnh phát xạ của màn hình sRGB tiêu chuẩn. Ví dụ hàng 1: tế bào nón L nhạy nhiều nhất với ánh sáng lục (0.5783) và đỏ (0.3811), hầu như không nhạy với ánh sáng lam (0.0402).
+
+```python
 _LAB_MAT = np.array([
   [1.0 / np.sqrt(3.0),  1.0 / np.sqrt(3.0),  1.0 / np.sqrt(3.0)],
   [1.0 / np.sqrt(6.0),  1.0 / np.sqrt(6.0), -2.0 / np.sqrt(6.0)],
   [1.0 / np.sqrt(2.0), -1.0 / np.sqrt(2.0),  0.0],
 ], dtype=np.float64)
-
-_INV_LAB_MAT = np.array([
-  [1.0 / np.sqrt(3.0),  1.0 / np.sqrt(6.0),  1.0 / np.sqrt(2.0)],
-  [1.0 / np.sqrt(3.0),  1.0 / np.sqrt(6.0), -1.0 / np.sqrt(2.0)],
-  [1.0 / np.sqrt(3.0), -2.0 / np.sqrt(6.0),  0.0],
-], dtype=np.float64)
-
-_INV_LMS_MAT = np.linalg.inv(_LMS_MAT)
 ```
-- `_LMS_MAT`: Ma trận $3 \times 3$ chuyển từ RGB sang không gian nón LMS.
-- `_LAB_MAT`: Ma trận trực giao biến đổi từ $\log_{10}(\text{LMS})$ sang $L\alpha\beta$. Hàng 1 chia cho $\sqrt{3}$, hàng 2 chia cho $\sqrt{6}$, hàng 3 chia cho $\sqrt{2}$ để đảm bảo chuẩn Euclid bằng 1.
-- `_INV_LAB_MAT`, `_INV_LMS_MAT`: Các ma trận nghịch đảo để biến đổi ngược lại từ $L\alpha\beta \rightarrow \log_{10}(\text{LMS}) \rightarrow \text{RGB}$.
+
+#### 📌 Con số ma thuật: Ma trận trực giao `_LAB_MAT`:
+- Công thức chuyển từ $\log_{10}(\text{LMS})$ sang $L\alpha\beta$:
+  $$\begin{bmatrix} L \\ \alpha \\ \beta \end{bmatrix} = \begin{bmatrix} \frac{1}{\sqrt{3}} & \frac{1}{\sqrt{3}} & \frac{1}{\sqrt{3}} \\ \frac{1}{\sqrt{6}} & \frac{1}{\sqrt{6}} & \frac{-2}{\sqrt{6}} \\ \frac{1}{\sqrt{2}} & \frac{-1}{\sqrt{2}} & 0 \end{bmatrix} \begin{bmatrix} \log_{10} L \\ \log_{10} M \\ \log_{10} S \end{bmatrix}$$
+- **Tại sao lại có các mẫu số $\sqrt{3}, \sqrt{6}, \sqrt{2}$?**
+  Đây là điều kiện **Chuẩn hóa trực giao (Orthonormal)**:
+  - Hàng 1: $\sqrt{(1/\sqrt{3})^2 + (1/\sqrt{3})^2 + (1/\sqrt{3})^2} = \sqrt{1/3 + 1/3 + 1/3} = 1.0$.
+  - Hàng 2: $\sqrt{(1/\sqrt{6})^2 + (1/\sqrt{6})^2 + (-2/\sqrt{6})^2} = \sqrt{1/6 + 1/6 + 4/6} = 1.0$.
+  - Hàng 3: $\sqrt{(1/\sqrt{2})^2 + (-1/\sqrt{2})^2 + 0^2} = \sqrt{1/2 + 1/2} = 1.0$.
+  - Tích vô hướng giữa các hàng bất kỳ bằng đúng 0 (ví dụ hàng 1 và hàng 2: $\frac{1}{\sqrt{18}} + \frac{1}{\sqrt{18}} - \frac{2}{\sqrt{18}} = 0$).
+  Điều này bảo đảm phép chiếu là một phép quay cứng trong không gian 3D, **bảo toàn tuyệt đối khoảng cách Euclid giữa các màu**, không làm bóp méo hình dạng của đám mây phân phối điểm ảnh!
 
 ```python
 def _rgb_to_lab(rgb: np.ndarray) -> np.ndarray:
@@ -203,19 +265,7 @@ def _rgb_to_lab(rgb: np.ndarray) -> np.ndarray:
   log_lms = np.log10(np.clip(lms, 1e-4, None))
   return log_lms @ _LAB_MAT.T
 ```
-- `np.clip(..., 1e-4, 1.0)`: Rất quan trọng! Nếu pixel bằng 0 (đen tuyệt đối), phép tính $\log_{10}(0)$ sẽ sinh ra $-\infty$ làm sập toàn bộ mạng nơ-ron. Chặn dưới tại $10^{-4}$ loại trừ triệt để lỗi số học.
-- `norm_rgb @ _LMS_MAT.T`: Nhân ma trận chiếu pixel từ RGB sang LMS.
-- `log_lms @ _LAB_MAT.T`: Chiếu sang không gian đối kháng Ruderman LAB.
-
-```python
-def _lab_to_rgb(lab: np.ndarray) -> np.ndarray:
-  log_lms = lab @ _INV_LAB_MAT.T
-  lms = 10.0 ** log_lms
-  rgb = lms @ _INV_LMS_MAT.T
-  return np.clip(rgb * 255.0, 0, 255).astype(np.uint8)
-```
-- `10.0 ** log_lms`: Nghịch đảo logarit để khôi phục LMS tuyến tính.
-- `np.clip(rgb * 255.0, 0, 255).astype(np.uint8)`: Giới hạn điểm ảnh trong phạm vi nguyên 8-bit $[0, 255]$.
+- `np.clip(..., 1e-4, 1.0)`: **Con số $10^{-4}$ (0.0001)**: Nếu một pixel có giá trị bằng 0 (đen tuyệt đối), phép tính $\log_{10}(0) = -\infty$. Khi nhân ma trận, $-\infty$ sẽ biến thành `NaN` (Not a Number) và lan ra toàn bộ tensor, làm hỏng toàn bộ mô hình. Việc chặn dưới tại $10^{-4}$ tương ứng với giá trị pixel tối thiểu $0.0255 / 255$, đủ nhỏ để mắt người coi là màu đen nhưng giữ an toàn số học tuyệt đối.
 
 ```python
 def reinhard_fit(reference_rgb: np.ndarray) -> Dict[str, np.ndarray]:
@@ -236,19 +286,27 @@ def reinhard_apply(image_rgb: np.ndarray, ref_stats: Dict[str, np.ndarray]) -> n
 
   return _lab_to_rgb(norm_lab)
 ```
-- `+ 1e-6`: Epsilon chống chia cho 0 khi độ lệch chuẩn bằng 0 (ví dụ ảnh đơn sắc hoàn toàn).
-- `((lab - mean) / std) * ref_std + ref_mean`: Công thức căn chỉnh phân phối Gaussian một chiều độc lập trên từng kênh: trừ kỳ vọng nguồn, chia độ lệch chuẩn nguồn, nhân độ lệch chuẩn đích, cộng kỳ vọng đích.
+- `+ 1e-6`: Epsilon chống chia cho 0 khi độ lệch chuẩn bằng 0 (ví dụ trong ảnh nền kính đơn sắc hoàn toàn không có mẫu mô).
+- **Công thức căn chỉnh Gaussian 1 chiều**:
+  $$L_{\text{norm}} = \frac{L_{\text{src}} - \mu_{L,\text{src}}}{\sigma_{L,\text{src}}} \cdot \sigma_{L,\text{ref}} + \mu_{L,\text{ref}}$$
+  Trừ kỳ vọng nguồn để đưa về gốc 0 $\to$ chia độ lệch chuẩn nguồn để co phương sai về 1 $\to$ nhân độ lệch chuẩn đích để mở rộng biên độ theo mẫu $\to$ cộng kỳ vọng đích để dời tâm phân phối về mẫu.
 
 ---
 
 ### 5.3. Khối 3: Chuẩn hóa phân rã quang học Macenko (Dòng 103 – 165)
 
-#### Cơ sở toán học:
-Định luật Beer-Lambert chỉ ra mối liên hệ giữa cường độ ánh sáng truyền qua $I$ và mật độ quang học $OD$:
-$$I = I_0 \cdot 10^{-OD} \implies OD = -\log_{10}\left(\frac{I}{I_0}\right)$$
-Trong đó $I_0 = 255$ là cường độ nguồn sáng xuyên qua kính trắng. Mặt khác:
-$$OD = V \cdot C$$
-Với $V \in \mathbb{R}^{3 \times 2}$ là ma trận hệ số hấp thụ màu của 2 chất nhuộm (Hematoxylin và Eosin), và $C \in \mathbb{R}^{2}$ là nồng độ của từng chất tại điểm ảnh đó.
+#### 📌 Cơ sở vật lý & Định luật Beer-Lambert:
+Mô bệnh học H&E sử dụng 2 hóa chất nhuộm màu có cơ chế hóa sinh hoàn toàn khác nhau:
+1. **Hematoxylin (H)**: Chất nhuộm ái kiềm, liên kết với axit nucleic (ADN) trong nhân tế bào, hấp thụ ánh sáng đỏ và lục, cho ra **màu tím than / xanh đen**.
+2. **Eosin (E)**: Chất nhuộm ái axit, liên kết với protein trong bào tương tế bào và chất nền collagen ngoại bào, hấp thụ ánh sáng lục, cho ra **màu hồng cánh sen**.
+
+Theo định luật Beer-Lambert trong quang học, cường độ ánh sáng $I$ truyền qua lớp mẫu có độ dày $d$ và nồng độ chất nhuộm $C$ suy giảm theo hàm mũ:
+$$I = I_0 \cdot 10^{-OD}$$
+Trong đó $I_0 = 255$ là cường độ nguồn sáng ban đầu khi chiếu qua kính trắng không có vật thể. Lấy logarit cơ số 10 hai vế, ta thu được **Mật độ quang học (Optical Density - OD)** tuyến tính với nồng độ:
+$$OD = -\log_{10}\left(\frac{I}{I_0}\right) = V \cdot C$$
+Trong đó:
+- $V = [\mathbf{v}_H, \mathbf{v}_E] \in \mathbb{R}^{3 \times 2}$ là ma trận véc-tơ màu nhuộm (Stain Matrix), đại diện cho hệ số hấp thụ ánh sáng của H và E trên 3 kênh R, G, B.
+- $C = [C_H, C_E]^T \in \mathbb{R}^{2}$ là nồng độ thực tế của từng chất nhuộm tại điểm ảnh đó.
 
 ```python
 def macenko_fit(reference_rgb: np.ndarray, od_threshold: float = 0.15) -> Dict[str, np.ndarray]:
@@ -257,8 +315,14 @@ def macenko_fit(reference_rgb: np.ndarray, od_threshold: float = 0.15) -> Dict[s
   mask = np.linalg.norm(flat_od, axis=1) > od_threshold
   flat_od = flat_od[mask]
 ```
-- `+ 1.0) / 256.0`: Kỹ thuật số học chuẩn tránh trường hợp $I = 0 \implies \log_{10}(0)$ hoặc $I = 255 \implies OD = 0$.
-- `np.linalg.norm(flat_od, axis=1) > od_threshold`: Tính độ dài vector quang học. Nếu nhỏ hơn 0.15, đó là pixel nền kính trong suốt, bắt buộc phải loại bỏ để không làm sai lệch SVD.
+
+#### 📌 Con số ma thuật: `+ 1.0) / 256.0` và `od_threshold = 0.15`:
+- `(reference_rgb + 1.0) / 256.0`:
+  - Nếu pixel thô bằng 0: $(0 + 1) / 256 = 1/256 > 0 \implies -\log_{10}(1/256) \approx 2.408$ (không bị lỗi $\log_{10}(0)$).
+  - Nếu pixel thô bằng 255: $(255 + 1) / 256 = 256/256 = 1.0 \implies -\log_{10}(1.0) = 0.0$ (kính trắng trong suốt có mật độ hấp thụ quang học $OD = 0$).
+- `od_threshold = 0.15`:
+  - Độ dài véc-tơ quang học: $\|OD\| = \sqrt{OD_R^2 + OD_G^2 + OD_B^2}$.
+  - Nếu $\|OD\| \le 0.15$, độ truyền quang $T = 10^{-0.15} \approx 0.708 = 70.8\%$. Các điểm ảnh này là nền kính trong suốt hoặc bọt khí. Bắt buộc phải lọc bỏ để các điểm kính không kéo lệch ma trận hiệp phương sai khi phân tích SVD!
 
 ```python
   _, _, vh = np.linalg.svd(flat_od, full_matrices=False)
@@ -268,9 +332,12 @@ def macenko_fit(reference_rgb: np.ndarray, od_threshold: float = 0.15) -> Dict[s
   min_phi = np.percentile(phi, 1.0)
   max_phi = np.percentile(phi, 99.0)
 ```
-- `np.linalg.svd(flat_od)`: Phân tích giá trị kỳ dị. Hai hàng đầu tiên của $V^T$ (`vh[:2]`) chính là 2 véc-tơ trực giao span nên mặt phẳng chứa nhiều biến thiên mật độ quang học nhất.
-- `np.arctan2(proj[:, 1], proj[:, 0])`: Chuyển tọa độ chiếu 2D sang góc cực $\phi \in [-\pi, \pi]$.
-- `np.percentile(..., 1.0)` và `np.percentile(..., 99.0)`: **Tuyệt đối không lấy Min/Max tuyệt đối!** Vì ảnh luôn có bụi bẩn hoặc hạt nhiễu cực đoan. Phân vị 1% và 99% giúp loại bỏ 2% nhiễu ngoại lai một cách bền vững.
+
+#### 📌 Con số ma thuật: SVD `vh[:2]` và Phân vị `1.0%`, `99.0%`:
+- `vh[:2]`: Phân tích giá trị kỳ dị (Singular Value Decomposition) biểu diễn đám mây điểm quang học $N \times 3$ thành các thành phần chính. Hai véc-tơ riêng đầu tiên tương ứng với hai giá trị kỳ dị lớn nhất định hình nên mặt phẳng 2D chứa 98% phương sai dữ liệu (chính là mặt phẳng tạo bởi 2 chất nhuộm H và E).
+- `np.arctan2(proj[:, 1], proj[:, 0])`: Chiếu các điểm lên mặt phẳng 2D và đổi sang góc cực $\phi \in [-\pi, \pi]$.
+- **Tại sao lấy phân vị 1.0% và 99.0% mà không lấy Min/Max tuyệt đối?**
+  Trên tiêu bản kính hiển vi luôn có các hạt bụi kính, vết xước hoặc tinh thể thuốc nhuộm bị kết tủa cục bộ. Nếu lấy $\min(\phi)$ và $\max(\phi)$, một hạt bụi đơn lẻ cũng có thể làm xoay véc-tơ màu đi $30^\circ$, phá hỏng toàn bộ quá trình chuẩn hóa. Cắt bỏ 1% ở hai đầu biên (phân vị $1\%$ và $99\%$) loại bỏ $2\%$ ngoại lai cực đoan, bảo đảm thuật toán vững chãi (*robust*) trước nhiễu.
 
 ```python
   v1 = vh[:2].T @ np.array([np.cos(min_phi), np.sin(min_phi)])
@@ -285,24 +352,32 @@ def macenko_fit(reference_rgb: np.ndarray, od_threshold: float = 0.15) -> Dict[s
 
   return {"stain_matrix": stain_matrix, "q99": q99}
 ```
-- `if v1[0] < v2[0]: v1, v2 = v2, v1`: Hematoxylin (Tím) hấp thụ ánh sáng đỏ (kênh 0) mạnh hơn nhiều so with Eosin (Hồng). Dòng này bảo đảm quy ước cột 0 luôn là Hematoxylin, cột 1 luôn là Eosin.
-- `np.linalg.pinv(stain_matrix).T`: Dùng giả nghịch đảo Moore-Penrose để giải hệ phương trình nồng độ: $C = OD \cdot (V^+)^T$.
-- `q99`: Nồng độ cực đại phân vị 99% của từng chất nhuộm trên ảnh mẫu.
+- `if v1[0] < v2[0]: v1, v2 = v2, v1`:
+  Kênh đỏ (Red channel) ở vị trí index 0. Hematoxylin có màu tím than nên hấp thụ ánh sáng đỏ rất mạnh ($OD_R$ rất lớn). Eosin có màu hồng nên phản xạ ánh sáng đỏ, hấp thụ đỏ rất ít ($OD_R$ nhỏ). Dòng lệnh này đảm bảo quy ước cố định: **Cột 0 luôn là Hematoxylin, Cột 1 luôn là Eosin**.
+- `np.linalg.pinv(stain_matrix).T`: Tính ma trận giả nghịch đảo Moore-Penrose $V^+ = (V^T V)^{-1} V^T$ để giải hệ phương trình nồng độ từ mật độ quang: $C = OD \cdot (V^+)^T$.
 
 ```python
 def macenko_apply(image_rgb: np.ndarray, ref_params: Dict[str, np.ndarray], od_threshold: float = 0.15) -> np.ndarray:
   ...
   if mask.sum() < 0.20 * h * w:
     return image_rgb
+  ...
+  norm_conc = tile_conc * (ref_params["q99"] / q99)
+  norm_od = norm_conc @ ref_params["stain_matrix"].T
+  norm_rgb = 256.0 * (10.0 ** -norm_od) - 1.0
+  return np.clip(norm_rgb.reshape(h, w, 3), 0, 255).astype(np.uint8)
 ```
-- `mask.sum() < 0.20 * h * w`: **Cơ chế phòng thủ số 1 của Macenko**: Nếu diện tích mô nhỏ hơn 20% khung hình (ví dụ ảnh toàn phông nền trắng hoặc chất nhầy loãng), số lượng điểm quang học không đủ để SVD hội tụ tin cậy. Khi đó hàm lập tức trả về ảnh gốc để tránh làm méo mó cấu trúc.
-- `norm_conc = tile_conc * (ref_params["q99"] / q99)`: Co giãn nồng độ của ảnh nguồn theo nồng độ ảnh tham chiếu.
-- `norm_od = norm_conc @ ref_params["stain_matrix"].T`: Tái tổng hợp mật độ quang học bằng ma trận màu của ảnh mẫu.
-- `norm_rgb = 256.0 * (10.0 ** -norm_od) - 1.0`: Nghịch đảo định luật Beer-Lambert về lại RGB.
+- `mask.sum() < 0.20 * h * w`: **Cơ chế tự vệ ngưỡng 20%**:
+  Một ảnh tile $224 \times 224 = 50.176$ điểm ảnh. Nếu số pixel mô có $\|OD\| > 0.15$ ít hơn 20% ($< 10.035$ pixels), nghĩa là ảnh này hầu như toàn kính trắng hoặc chất nhầy loãng. Khi đó ma trận hiệp phương sai không đủ mẫu để SVD hội tụ tin cậy (ma trận bị suy biến). Hàm lập tức trả về nguyên ảnh gốc để tránh hiện tượng ảnh bị biến màu thành đen kịt hoặc nhiễu sọc.
+- `tile_conc * (ref_params["q99"] / q99)`: Co giãn nồng độ cực đại của ảnh nguồn bằng nồng độ của ảnh tham chiếu.
+- `256.0 * (10.0 ** -norm_od) - 1.0`: Nghịch đảo định luật Beer-Lambert để biến đổi mật độ quang học đã chuẩn hóa trở lại không gian pixel sRGB.
 
 ---
 
 ### 5.4. Khối 4: Tăng cường nhiễu nồng độ màu sinh học HED Jitter (Dòng 167 – 194)
+
+#### 📌 Cơ sở lâm sàng:
+Trong thực tế, khi kỹ thuật viên giải phẫu bệnh pha hóa chất, nồng độ của dung dịch thuốc nhuộm có thể dao động $\pm 15 - 25\%$, và thời gian ngâm lam kính có thể chênh lệch vài chục giây. HED Stain Jitter mô phỏng chính xác sự biến thiên hóa lý này trực tiếp trên nồng độ thuốc nhuộm $C_H$ và $C_E$ thay vì đổi màu tùy tiện trong không gian RGB.
 
 ```python
 HE_STAIN_MATRIX = np.array([
@@ -312,28 +387,25 @@ HE_STAIN_MATRIX = np.array([
 ], dtype=np.float64)
 HE_STAIN_MATRIX /= np.linalg.norm(HE_STAIN_MATRIX, axis=0, keepdims=True)
 ```
-- `HE_STAIN_MATRIX`: Ma trận véc-tơ màu nhuộm H&E chuẩn thực nghiệm trong y sinh học. Cột 1 là Hematoxylin $[0.650, 0.704, 0.286]^T$, cột 2 là Eosin $[0.072, 0.990, 0.105]^T$.
+
+#### 📌 Con số ma thuật: Ma trận `HE_STAIN_MATRIX`:
+- Đây là ma trận hấp thụ quang phổ thực nghiệm đo bằng máy quang phổ được công bố trong bài báo kinh điển của **Ruifrok & Johnston (2001)** (*"Quantification of histochemical staining by color deconvolution"*):
+  - Cột 1 (Hematoxylin): $[0.650, 0.704, 0.286]^T$ (hấp thụ mạnh ở kênh R và G, yếu ở B $\to$ màu xanh tím).
+  - Cột 2 (Eosin): $[0.072, 0.990, 0.105]^T$ (hấp thụ cực mạnh ở kênh G = 0.990, phản xạ R và B $\to$ màu hồng cánh sen).
 
 ```python
 def hed_stain_jitter(image_rgb: np.ndarray, sigma: float = 0.2, bias: float = 0.05) -> np.ndarray:
-  od = -np.log10((image_rgb.astype(np.float64) + 1.0) / 256.0)
-  h, w, _ = od.shape
-  flat_od = od.reshape(-1, 3)
-
-  c = flat_od @ np.linalg.pinv(HE_STAIN_MATRIX).T
+  ...
   alpha = np.random.uniform(1.0 - sigma, 1.0 + sigma, size=2)
   beta = np.random.uniform(-bias, bias, size=2)
 
   c[:, 0] = np.clip(c[:, 0] * alpha[0] + beta[0], 0, None)
   c[:, 1] = np.clip(c[:, 1] * alpha[1] + beta[1], 0, None)
-
-  od_jittered = c @ HE_STAIN_MATRIX.T
-  rgb_jittered = 256.0 * (10.0 ** -od_jittered) - 1.0
-  return np.clip(rgb_jittered.reshape(h, w, 3), 0, 255).astype(np.uint8)
+  ...
 ```
-- `alpha`: Hệ số co giãn nồng độ ngẫu nhiên trong khoảng $[1 - 0.2, 1 + 0.2] = [0.8, 1.2]$ (mô phỏng kỹ thuật viên pha hóa chất đậm hoặc nhạt hơn 20%).
-- `beta`: Độ dịch chuyển nồng độ ngẫu nhiên $[-0.05, 0.05]$ (mô phỏng thời gian ngâm tiêu bản lâu hoặc nhanh).
-- `np.clip(..., 0, None)`: Đảm bảo nồng độ thuốc nhuộm không bao giờ âm về mặt vật lý.
+- `sigma = 0.2`: Hệ số co giãn nồng độ $\alpha \in [1 - 0.2, 1 + 0.2] = [0.8, 1.2]$, mô phỏng sự đậm nhạt hóa chất trong khoảng $\pm 20\%$.
+- `bias = 0.05`: Độ dịch chuyển nền nồng độ $\beta \in [-0.05, 0.05]$, mô phỏng thời gian ngâm rửa tiêu bản.
+- `np.clip(..., 0, None)`: Chặn dưới tại 0 vì nồng độ thuốc nhuộm trong vật lý không thể nhận giá trị âm.
 
 ---
 
@@ -348,7 +420,6 @@ class PatchTransform:
 
   def __call__(self, img_pil: Image.Image) -> Any:
     import torchvision.transforms.functional as TF
-
     arr = np.array(img_pil.convert("RGB"))
     if self.norm_fn is not None:
       arr = self.norm_fn(arr)
@@ -367,9 +438,16 @@ class PatchTransform:
 
     return TF.normalize(tensor, mean=IMAGENET_MEAN, std=IMAGENET_STD)
 ```
-- **Ý nghĩa cờ `is_train`**: Cực kỳ quan trọng! Khi `is_train=False` (lúc đánh giá tập val hoặc test), toàn bộ các bước ngẫu nhiên (HED Jitter, lật xoay) bị tắt hoàn toàn. Đánh giá kiểm thử luôn phải trên ảnh gốc nhất quán.
-- `TF.to_tensor(arr)`: Chuyển đổi định dạng từ NumPy $(H, W, C)$ uint8 $[0, 255]$ sang PyTorch Tensor $(C, H, W)$ float32 $[0.0, 1.0]$.
-- `TF.rotate(tensor, rot)`: Chỉ xoay các góc trực giao $\{0^\circ, 90^\circ, 180^\circ, 270^\circ\}$ để không sinh ra các góc đen bị cắt viền do phép xoay góc lẻ.
+
+#### 📌 Con số ma thuật & Cơ chế vận hành:
+- **Cờ `is_train`**: Bắt buộc phải là `False` khi chạy trên tập Validation và tập Test. Lúc kiểm thử, mô hình phải được đánh giá trên ảnh thực tế khách quan, tuyệt đối không được thêm nhiễu ngẫu nhiên.
+- `random.random() > 0.2`: **Xác suất 80% áp dụng HED Jitter**:
+  Giữ lại 20% ảnh ở trạng thái màu nguyên bản để mô hình vừa học được tính bất biến với biến thiên nồng độ, vừa ghi nhớ được phân phối màu chuẩn tự nhiên.
+- `random.random() > 0.5`: **Xác suất 50% lật ngang / dọc**:
+  Tế bào mô học sinh học không có khái niệm "trên dưới trái phải" (tính bất biến đẳng hướng). Lật ngang và lật dọc độc lập giúp nhân gấp 4 lần không gian mẫu hình thái học.
+- `rot = random.choice([0, 90, 180, 270])`:
+  **Tại sao chỉ quay các góc $0^\circ, 90^\circ, 180^\circ, 270^\circ$?**
+  Nếu quay các góc lẻ (ví dụ $30^\circ, 45^\circ$), bức ảnh vuông sẽ bị hở 4 góc đen hình tam giác (vùng không xác định) hoặc phải cắt cúp xén bớt nội dung. Chỉ có phép quay vuông góc bội số $90^\circ$ mới giữ nguyên vẹn 100% diện tích pixel của ô vuông $224 \times 224$ mà không sinh ra viền đen.
 
 ---
 
@@ -378,36 +456,42 @@ class PatchTransform:
 ```python
 def find_class_images(base_dir: Path, class_name: str) -> List[Path]:
 ```
-- Quét thông minh: Kiểm tra thư mục con trực tiếp trước (`base_dir / class_name`), nếu không thấy thì duyệt không phân biệt chữ hoa/thường, nếu vẫn không thấy thì quét đệ quy `rglob("*")`. Điều này giúp code chạy mượt mà trên mọi cấu trúc giải nén zip của Kaggle.
+- Cơ chế quét phòng thủ 3 cấp: Tìm thư mục con trực tiếp `base_dir / class_name` $\to$ nếu không có, tìm không phân biệt chữ hoa/thường $\to$ nếu vẫn không có, quét đệ quy `rglob("*")`. Giúp code chạy ổn định trên mọi cách giải nén file zip khác nhau của Kaggle.
 
 ```python
 def prepare_dataset_splits(source_dir, target_dir, out_dir, subset_size=25000, seed=100):
   ...
-  # Lấy mẫu phân tầng 25.000 ảnh từ 100.000 ảnh nguồn
   if 0 < subset_size < len(source_df):
     per_class = subset_size // NUM_CLASSES
     source_df = source_df.groupby("class_name", group_keys=False).apply(
       lambda g: g.sample(min(len(g), per_class), random_state=seed)
     ).reset_index(drop=True)
 
-  # Chia 70% train / 15% val_id / 15% test_id có phân tầng
   train_df, rest_df = train_test_split(source_df, test_size=0.30, stratify=source_df["class_name"], random_state=seed)
   val_df, test_id_df = train_test_split(rest_df, test_size=0.50, stratify=rest_df["class_name"], random_state=seed)
 ```
-- `per_class = 25000 // 9 = 2777` ảnh mỗi lớp: Đảm bảo cân bằng lớp tuyệt đối ngay từ khâu lấy mẫu.
-- `stratify=source_df["class_name"]`: Đảm bảo tỷ lệ 9 lớp mô học trong tập Train (17.495 ảnh), Val (3.749 ảnh) và Test-ID (3.749 ảnh) đồng nhất hoàn hảo.
+
+#### 📌 Con số ma thuật: `subset_size = 25000`, Tỷ lệ $70/15/15$, `seed = 100`:
+- **Tại sao lấy mẫu 25.000 ảnh từ 100.000 ảnh nguồn?**
+  - $25000 // 9 = 2777$ ảnh cho mỗi lớp.
+  - Theo quy luật suy giảm hiệu suất cận biên (*Diminishing Returns*), 2.777 ảnh mỗi lớp là quá đủ để một mô hình pretrained hội tụ đặc trưng hình thái (đạt 99% tiềm năng so với 100.000 ảnh).
+  - Giảm số lượng từ 100K xuống 25K giúp giảm thời gian chạy từ 14 giờ xuống chỉ còn 3.5 giờ, vừa vặn hoàn thành toàn bộ 13 thí nghiệm trong hạn mức GPU Kaggle.
+- **Tỷ lệ phân chia $70\% / 15\% / 15\%$**:
+  - `test_size=0.30`: Tách 70% làm `train_df` (17.495 ảnh), giữ lại 30% làm `rest_df`.
+  - `test_size=0.50` trên `rest_df`: Chia đôi 30% thành 15% `val_df` (3.749 ảnh) và 15% `test_id_df` (3.749 ảnh).
+- `stratify=source_df["class_name"]`: Bảo đảm tỷ lệ phân bố giữa 9 lớp mô học trong tập Train, Val và Test-ID là giống nhau tuyệt đối.
+- `seed = 100`: Khóa cố định bộ sinh số ngẫu nhiên để việc chọn mẫu luôn cho ra đúng danh sách ảnh này ở mọi lần chạy.
 
 ```python
-  # Trích xuất ảnh mẫu tham chiếu chuẩn hóa
   tum_train = train_df[train_df["class_name"] == "TUM"]
   ref_path = Path(tum_train.iloc[0]["image_path"])
   ref_img = Image.open(ref_path).convert("RGB")
   ref_save_path = out_dir / "reference_stain.png"
   ref_img.save(ref_save_path)
 ```
-- **Tại sao lấy ảnh tham chiếu từ tập Train của lớp `TUM`?**:
-  1. Tuyệt đối không lấy từ tập test để tránh rò rỉ dữ liệu (*Data Leakage*).
-  2. Lớp `TUM` (u đại trực tràng) có mật độ tế bào dày đặc, bắt cả hai loại thuốc nhuộm Hematoxylin (nhân u) và Eosin (chất nền) rất rõ ràng, tạo ra véc-tơ màu chuẩn mực nhất cho thuật toán Macenko và Reinhard.
+- **Tại sao lấy ảnh tham chiếu từ tập Train của lớp `TUM`?**
+  1. Tuyệt đối không lấy từ tập Test để tránh rò rỉ dữ liệu (*Data Leakage*).
+  2. Lớp `TUM` (biểu mô u ác tính) là vùng mô có mật độ nhân u bắt màu tím Hematoxylin dày đặc nhất, đồng thời xen kẽ chất nền bắt màu hồng Eosin rõ rệt nhất. Đây là loại mô có phân phối phổ màu phong phú và chuẩn mực nhất để làm khuôn mẫu chuẩn hóa.
 
 ---
 
@@ -430,10 +514,22 @@ def build_model(backbone_name: str, num_classes: int = NUM_CLASSES):
         return self.fc(feat)
 
     return PhikonClassifier()
+  elif backbone_name == "convnext_tiny":
+    import timm
+    return timm.create_model("convnext_tiny.fb_in1k", pretrained=True, num_classes=num_classes)
+  elif backbone_name == "resnet50":
+    import timm
+    return timm.create_model("resnet50.a1_in1k", pretrained=True, num_classes=num_classes)
 ```
-- `p.requires_grad = False`: **Giao thức Linear Probing**: Đóng băng toàn bộ 86 triệu tham số của Vision Transformer. Mô hình không được phép cập nhật trọng số backbone, chỉ huấn luyện duy nhất tầng phân loại cuối cùng `nn.Linear(768, 9)`.
-- `last_hidden_state[:, 0]`: Trong kiến trúc ViT, token tại vị trí index 0 là **Class Token `[CLS]`** — nơi tổng hợp thông tin ngữ nghĩa toàn cục của toàn bộ bức ảnh thông qua các tầng Self-Attention.
-- `timm.create_model("convnext_tiny.fb_in1k", ...)` & `timm.create_model("resnet50.a1_in1k", ...)`: Nạp trọng số tiền huấn luyện ImageNet-1K từ thư viện `timm`.
+
+#### 📌 Con số ma thuật: 2048, 768, và `requires_grad = False`:
+- **ResNet-50**: Tầng Pooling trung bình cuối cùng tạo ra vector đặc trưng kích thước **2048** chiều trước khi vào tầng `fc = nn.Linear(2048, 9)`.
+- **ConvNeXt-Tiny**: Kích thước đặc trưng đầu ra là **768** chiều trước khi vào `head.fc = nn.Linear(768, 9)`.
+- **Phikon (ViT-B/16)**:
+  - Ảo hóa ảnh $224 \times 224$ thành $14 \times 14 = 196$ patch vuông kích thước $16 \times 16$.
+  - Kích thước không gian ẩn (hidden dimension) của ViT-Base là **768** chiều.
+  - `p.requires_grad = False`: **Giao thức Linear Probing**: Đóng băng toàn bộ 86 triệu tham số của Vision Transformer, chỉ học duy nhất tầng phân loại `nn.Linear(768, 9)` gồm đúng $768 \times 9 + 9 = 6.921$ tham số!
+  - `last_hidden_state[:, 0]`: Lấy ra **Class Token `[CLS]`** tại vị trí index 0. Trong cơ chế Self-Attention của ViT, token này đóng vai trò gom tụ toàn bộ thông tin ngữ nghĩa toàn cục của bức ảnh.
 
 ---
 
@@ -441,25 +537,34 @@ def build_model(backbone_name: str, num_classes: int = NUM_CLASSES):
 
 ```python
 def evaluate_model(model, loader, device) -> Dict[str, float]:
-  ...
+  model.eval()
+  y_true, y_pred, y_prob = [], [], []
+
   with torch.no_grad():
     for images, targets in loader:
       images = images.to(device, non_blocking=True)
       with torch.amp.autocast("cuda"):
         logits = model(images)
       probs = torch.softmax(logits.float(), dim=1).cpu().numpy()
-      ...
+      y_prob.extend(probs)
+      y_pred.extend(np.argmax(probs, axis=1))
+      y_true.extend(targets.numpy())
+
   macro_f1 = f1_score(y_true, y_pred, average="macro", zero_division=0)
   bal_acc = balanced_accuracy_score(y_true, y_pred)
   acc = accuracy_score(y_true, y_pred)
   auroc = roc_auc_score(y_true, y_prob, multi_class="ovr", average="macro")
 ```
-- `torch.no_grad()`: Tắt đồ thị đạo hàm để tiết kiệm VRAM và tăng tốc gấp đôi tốc độ suy luận.
-- `torch.amp.autocast("cuda")`: Suy luận bằng độ chính xác nửa (fp16) trên nhân Tensor Core của GPU NVIDIA.
-- `f1_score(..., average="macro")`: **Chỉ số đo lường vàng của nghiên cứu**: Tính F1 độc lập cho từng lớp rồi lấy trung bình cộng không trọng số:
-$$\text{Macro-F1} = \frac{1}{9} \sum_{c=1}^{9} \text{F1}_c$$
-Giúp đánh giá công bằng, không bị thiên lệch bởi các lớp chiếm số đông.
-- `roc_auc_score(..., multi_class="ovr")`: Diện tích dưới đường cong ROC theo chiến lược Một-đối-tất-cả (One-vs-Rest).
+
+#### 📌 Kỹ thuật tăng tốc & Công thức các chỉ số:
+- `torch.no_grad()`: Hủy bỏ việc xây dựng đồ thị tính toán đạo hàm (Computational Graph), giảm một nửa lượng VRAM tiêu thụ và tăng tốc độ suy luận gấp 2 lần.
+- `non_blocking=True`: Cho phép nạp dữ liệu từ RAM CPU sang VRAM GPU bất đồng bộ qua kênh DMA, che khuất độ trễ truyền dữ liệu.
+- `torch.amp.autocast("cuda")`: Tự động tính toán số học dấu phẩy động 16-bit (`fp16`) trên nhân Tensor Core của GPU.
+- **Công thức Macro-F1 với `zero_division=0`**:
+  $$\text{Macro-F1} = \frac{1}{9} \sum_{c=0}^8 \text{F1}_c, \quad \text{F1}_c = \frac{2 \cdot TP_c}{2 \cdot TP_c + FP_c + FN_c}$$
+  `zero_division=0` ngăn chặn lỗi chia cho 0 khi một lớp nào đó không có dự đoán dương tính nào ($TP_c + FP_c = 0$).
+- **One-vs-Rest AUROC**:
+  $$\text{Macro-AUROC} = \frac{1}{9} \sum_{c=0}^8 \text{AUC}(\text{Lớp } c \text{ vs Tất cả các lớp còn lại})$$
 
 ---
 
@@ -471,24 +576,35 @@ Giúp đánh giá công bằng, không bị thiên lệch bởi các lớp chi�
   criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
   scaler = torch.amp.GradScaler("cuda")
 ```
-- `AdamW`: Khắc phục nhược điểm của Adam kinh điển bằng cách tách rời trực tiếp hệ số phân rã trọng số (*Decoupled Weight Decay* $0.05$), ngăn ngừa overfitting cực tốt.
-- `CosineAnnealingLR`: Hạ tốc độ học theo chu kỳ nửa sóng hình sin từ $10^{-3}$ xuống $10^{-5}$, giúp trọng số hội tụ êm ái vào đáy cực tiểu địa phương.
-- `Label Smoothing = 0.1`: Thay vì ép nhãn One-hot cứng nhắc $[0, 0, 1, \dots]$, chuyển thành nhãn mềm $[0.0125, 0.0125, 0.9, \dots]$. Chống hiện tượng mô hình quá tự tin (*overconfidence*), cải thiện rõ rệt khả năng tổng quát hóa trên miền lạ.
-- `scaler = torch.amp.GradScaler("cuda")`: Bộ co giãn gradient. Khi tính toán số thực 16-bit, các gradient quá nhỏ dễ bị tràn số dưới (*underflow*) về 0. `GradScaler` nhân gradient lên $2^{16}$ trước khi lan truyền ngược, sau đó chia lại trước khi cập nhật trọng số.
+
+#### 📌 Con số ma thuật: `lr=1e-3` vs `3e-4`, `weight_decay=0.05`, `label_smoothing=0.1`, `eta_min=1e-5`:
+- `lr=1e-3` (CNNs) vs `3e-4` (Phikon Linear Probe):
+  - Với ResNet và ConvNeXt, ta fine-tune toàn bộ mạng nên tốc độ học chuẩn của AdamW là $10^{-3}$.
+  - Với Phikon, ta chỉ huấn luyện 1 lớp tuyến tính duy nhất kết nối với các vector đặc trưng ViT đã đóng băng, nên cần tốc độ học bảo thủ hơn $3 \times 10^{-4}$ để trọng số không bị chao đảo.
+- `weight_decay=0.05`:
+  Hệ số phân rã trọng số của thuật toán AdamW (Loshchilov & Hutter, 2017). Tách rời việc phạt độ lớn trọng số L2 khỏi bước tính moment thích nghi, ép các trọng số không phình to, kiểm soát hiện tượng học thuộc lòng (overfitting).
+- `CosineAnnealingLR` với `eta_min=1e-5`:
+  Hạ tốc độ học sau từng batch theo đường cong cosin từ $\eta_{\max}$ xuống $\eta_{\min} = 10^{-5}$ ở cuối epoch 8. Giúp các bước cập nhật cuối cùng rất mịn màng, đưa trọng số rơi đúng vào đáy lòng chảo phẳng của hàm mất mát.
+- `criterion = nn.CrossEntropyLoss(label_smoothing=0.1)`:
+  **Công thức Label Smoothing ($0.1$)**:
+  $$y_{k}^{\text{smooth}} = (1 - \epsilon) y_{k} + \frac{\epsilon}{K} = 0.9 \cdot y_{k} + \frac{0.1}{9} \approx 0.9 \cdot y_{k} + 0.0111$$
+  Nhãn đúng nhận xác suất mục tiêu $0.911$, 8 nhãn sai nhận $0.011$. Ngăn chặn nơ-ron đẩy các giá trị logit ra vô cực, làm mềm ranh giới quyết định giữa các lớp mô tương đồng (ví dụ giữa cơ trơn và mô đệm).
+- `scaler = torch.amp.GradScaler("cuda")`:
+  Bảo vệ hiện tượng tràn số dưới (Underflow): Khi tính toán đạo hàm ở định dạng `fp16`, các gradient quá nhỏ ($< 2^{-14} \approx 6.1 \times 10^{-5}$) sẽ bị làm tròn về số 0. `GradScaler` nhân loss lên $2^{16} = 65.536$ trước khi backward, sau đó chia lại trước khi optimizer cập nhật trọng số.
 
 ```python
-  # Lưu giữ checkpoint tốt nhất trên tập Validation
+  # Cơ chế Early Best Checkpointing
   if val_res["macro_f1"] > best_val_f1:
     best_val_f1 = val_res["macro_f1"]
     best_state = copy.deepcopy(model.state_dict())
 ```
-- Cơ chế Early Best Checkpointing: Chỉ nạp trọng số có điểm `val_f1` cao nhất trong 8 epoch để đem đi kiểm thử trên `test_id` và `test_ood`.
+- Luôn giữ lại checkpoint có điểm `val_f1` cao nhất trong 8 epoch để đánh giá trên `test_id` và `test_ood`, triệt tiêu rủi ro lấy nhầm mô hình ở epoch bị overfit.
 
 ```python
   delta_f1 = round(id_res["macro_f1"] - ood_res["macro_f1"], 4)
   rr_f1 = round((ood_res["macro_f1"] / max(id_res["macro_f1"], 1e-6)) * 100.0, 2)
 ```
-- $\Delta\text{-F1} = \text{F1}_{\text{ID}} - \text{F1}_{\text{OOD}}$: Độ tụt dốc hiệu năng khi đổi bệnh viện (càng thấp càng tốt).
+- $\Delta\text{-F1} = \text{F1}_{\text{ID}} - \text{F1}_{\text{OOD}}$: Độ tụt dốc hiệu năng khi chuyển từ Heidelberg sang Aachen (càng thấp càng tốt).
 - $\text{Retention Rate (RR)} = \frac{\text{F1}_{\text{OOD}}}{\text{F1}_{\text{ID}}} \times 100\%$: Tỷ lệ giữ phong độ (càng gần 100% càng bền vững).
 
 ---
@@ -499,16 +615,59 @@ Giúp đánh giá công bằng, không bị thiên lệch bởi các lớp chi�
 def main():
   parser = argparse.ArgumentParser(...)
   ...
+  seed_everything(args.seed)
+  ...
   if args.dry_run:
-    # In kế hoạch 13 thí nghiệm mà không chạy thực tế (phục vụ kiểm tra)
     return
   ...
-  # Xuất bảng kết quả tóm tắt
   res_df.to_csv(csv_file, index=False)
   md_file.write_text(f"# Final Ablation Results\n\n{md_content}\n", encoding="utf-8")
 ```
-- Hỗ trợ cờ `--dry-run` để kiểm tra cú pháp và danh sách hàng đợi trong 0.5 giây.
-- Tự động xuất kết quả ra cả file máy đọc `summary_results.csv` và báo cáo người đọc `RESULTS_TABLE.md`.
+- `seed_everything(args.seed)`: Thiết lập đồng bộ hạt giống cho cả Python `random`, `numpy.random`, `torch.manual_seed`, và bật cờ `torch.backends.cudnn.deterministic = True`.
+- Cờ `--dry-run`: Chạy thử nghiệm phân tích tham số và in danh sách 13 thí nghiệm mà không tốn thời gian tải mô hình hay dữ liệu, phục vụ kiểm tra tính toàn vẹn hệ thống trong 0.5 giây.
+- Tự động xuất kết quả đồng thời ra 2 định dạng:
+  - `summary_results.csv`: Dành cho các công cụ phân tích dữ liệu tự động.
+  - `RESULTS_TABLE.md`: Bảng Markdown định dạng trực quan để trình bày trước Hội đồng.
+
+---
+
+### 5.11. BẢNG TRA CỨU TẤT CẢ CÁC CON SỐ MA THUẬT (MAGIC NUMBERS ENCYCLOPEDIA)
+
+Dưới đây là bảng tổng hợp tra cứu toàn bộ các con số, hệ số và siêu tham số xuất hiện trong toàn bộ dự án, giải thích cặn kẽ bản chất toán học/lâm sàng và kịch bản "Nếu thay đổi số này thì sao?":
+
+| Tên con số / Ký hiệu | Vị trí trong code | Giá trị thực tế | Định nghĩa & Ý nghĩa toán học / lâm sàng | Tại sao lại chọn số này? (Why this value?) | Nếu đổi sang số khác thì sao? (What if changed?) |
+| :--- | :--- | :---: | :--- | :--- | :--- |
+| **`NUM_CLASSES`** | `constants.py:27` | **9** | Số lượng lớp mô học mô bệnh học đại trực tràng | Tương ứng đúng 9 loại mô chuẩn trong bộ dữ liệu Kather et al. (PLOS Med 2019). | Nếu là 8 hoặc 10: Lỗi kích thước ma trận nhầm lẫn hoặc thiếu lớp mô học. |
+| **`IMAGENET_MEAN`** | `constants.py:30` | **`[0.485, 0.456, 0.406]`** | Kỳ vọng màu RGB của 1.28M ảnh ImageNet-1K | Các backbone tiền huấn luyện ResNet/ConvNeXt yêu cầu đầu vào chuẩn hóa quanh bộ số này. | Nếu đặt `[0.5, 0.5, 0.5]`: Các đặc trưng tầng đầu của CNN kích hoạt lệch vùng tối ưu, giảm F1 từ 1-2%. |
+| **`IMAGENET_STD`** | `constants.py:31` | **`[0.229, 0.224, 0.225]`** | Độ lệch chuẩn màu RGB của 1.28M ảnh ImageNet-1K | Đảm bảo phương sai đầu vào của mỗi kênh RGB bằng 1.0 theo chuẩn tiền huấn luyện. | Nếu đặt `[1.0, 1.0, 1.0]`: Biên độ gradient qua các tầng đầu bị thu hẹp hoặc nổ gradient. |
+| **`_LMS_MAT` coefficients** | `reinhard.py:22-26` | **`0.3811, 0.5783, 0.0402`** v.v. | Ma trận chuyển đổi từ sRGB sang phổ nón võng mạc LMS | Hệ số thực nghiệm đo đạc độ nhạy phổ của tế bào nón mắt người (Ruderman et al., 1998). | Nếu đổi số: Kênh đối kháng $L\alpha\beta$ bị tương quan chéo, không thể chuẩn hóa độc lập. |
+| **Trực giao `1/sqrt(3)`** | `reinhard.py:30` | **$\approx 0.5774$** | Hệ số chuẩn hóa Euclid của kênh độ sáng $L$ | $\sqrt{(1/\sqrt{3})^2 \times 3} = 1.0$, bảo toàn chuẩn vector độ sáng. | Nếu không chia $\sqrt{3}$: Không gian bị dãn nở dọc trục độ sáng, làm sai màu RGB khi biến đổi ngược. |
+| **Trực giao `1/sqrt(6)`** | `reinhard.py:31` | **$\approx 0.4082$** | Hệ số chuẩn hóa Euclid của kênh đối kháng $\alpha$ (Đỏ-Lục) | $\sqrt{1/6 + 1/6 + (-2/\sqrt{6})^2} = 1.0$, bảo toàn chuẩn vector đối kháng. | Nếu đổi số: Trục đỏ-lục mất tính trực giao với trục vàng-lam, sinh ra méo màu tím/hồng. |
+| **Trực giao `1/sqrt(2)`** | `reinhard.py:32` | **$\approx 0.7071$** | Hệ số chuẩn hóa Euclid của kênh đối kháng $\beta$ (Vàng-Lam) | $\sqrt{1/2 + 1/2} = 1.0$, bảo toàn chuẩn vector đối kháng vàng-lam. | Nếu đổi số: Phá hỏng tính đối xứng của hệ tọa độ cầu màu sắc. |
+| **Epsilon clip `1e-4`** | `reinhard.py:48` | **$10^{-4}$ (0.0001)** | Ngưỡng chặn dưới pixel tránh lỗi $\log_{10}(0)$ | $\log_{10}(0) = -\infty$ làm sinh mã lỗi `NaN`. $10^{-4}$ đủ nhỏ để coi như màu đen nhưng số học an toàn. | Nếu bỏ clip: Bất kỳ pixel đen nào cũng làm sập toàn bộ mô hình khi huấn luyện. |
+| **Epsilon chia `1e-6`** | `reinhard.py:65` | **$10^{-6}$** | Hằng số cộng vào độ lệch chuẩn chống chia cho 0 | Khi ảnh đơn sắc hoàn toàn, $\sigma = 0 \implies x/0 = \infty$. | Nếu không có: Chương trình bị lỗi ZeroDivisionError hoặc sinh ra tensor `Inf`. |
+| **Quang học `+ 1.0) / 256.0`** | `macenko.py:46` | **$+1.0$ và $/256.0$** | Chuyển đổi mức xám $[0, 255]$ sang độ truyền quang $T$ | Đảm bảo $T \in (0, 1]$, triệt tiêu cả 2 trường hợp suy biến $T=0$ ($\log_{10}(0)$) và $T=1$ ($OD=0$). | Nếu dùng $/255.0$: Pixel 255 cho $OD=0$, pixel 0 cho $OD=\infty$, gây lỗi SVD. |
+| **`od_threshold`** | `macenko.py:30` | **`0.15`** | Ngưỡng mật độ quang lọc nền kính trong suốt | Tương ứng độ truyền sáng $T > 70.8\%$, lọc bỏ hoàn toàn vùng kính không có mẫu mô. | Nếu để $0.0$: SVD bị kéo lệch về hướng kính trắng; nếu để $0.5$: Lọc mất các tế bào nhạt màu. |
+| **SVD Percentiles** | `macenko.py:66-67` | **`1.0%` và `99.0%`** | Phân vị góc cực $\phi$ để xác định vector màu H&E | Cắt bỏ 2% ngoại lai cực đoan gồm hạt bụi kính, vết xước lam kính và kết tủa thuốc nhuộm. | Nếu lấy Min/Max (0% và 100%): Một hạt bụi đơn lẻ cũng làm xoay ma trận màu gây đổi màu toàn bộ ảnh. |
+| **Ngưỡng mô tối thiểu** | `macenko.py:112` | **`0.20` (20%)** | Ngưỡng diện tích mô tối thiểu ($20\% \times H \times W$) | Dưới 20% mô, số lượng điểm quang học không đủ để ma trận hiệp phương sai SVD ổn định. | Nếu bỏ ngưỡng: Các ảnh kính trắng bị Macenko biến thành mảng màu loang lổ kỳ dị. |
+| **Véc-tơ màu `HE_STAIN_MATRIX`** | `constants.py:34-39` | **`[0.650, 0.704, 0.286]` & `[0.072, 0.990, 0.105]`** | Vector hệ số hấp thụ ánh sáng của Hematoxylin và Eosin | Trích xuất từ thực nghiệm đo quang phổ của Ruifrok & Johnston (2001) công bố trên tạp chí uy tín. | Nếu dùng vector ngẫu nhiên: Phép phân rã quang học làm sai lệch nồng độ hóa chất sinh học. |
+| **Jitter Sigma** | `constants.py:42` | **`0.2` (20%)** | Biên độ dao động nồng độ thuốc nhuộm ngẫu nhiên | Mô phỏng chính xác sai lệch pha hóa chất $\pm 20\%$ của kỹ thuật viên phòng xét nghiệm. | Nếu quá lớn ($0.5$): Ảnh bị biến dạng màu phi thực tế; nếu quá nhỏ ($0.05$): Không đủ để tạo tính bền vững. |
+| **Jitter Bias** | `constants.py:43` | **`0.05`** | Độ dịch chuyển nền nồng độ ngẫu nhiên | Mô phỏng sai lệch thời gian ngâm rửa tiêu bản trong cồn và nước. | Nếu quá lớn: Nền kính bị nhuộm màu giả; nếu quá nhỏ: Mô hình không học được tính bất biến nền. |
+| **Xác suất Jitter** | `transforms.py:46` | **`0.8` (80%)** | Tỷ lệ ảnh được áp dụng nhiễu màu sinh học HED | 80% ảnh có nhiễu giúp mô hình học tính bền vững, 20% ảnh sạch giúp mô hình nhớ phân phối chuẩn. | Nếu để 100%: Mô hình quên phân phối màu tự nhiên; nếu để 20%: Hiệu ứng tăng cường quá mờ nhạt. |
+| **Xác suất Lật** | `transforms.py:53-54` | **`0.5` (50%)** | Xác suất lật ngang và lật dọc độc lập | Khai thác tính đối xứng đẳng hướng sinh học của tế bào mô học, nhân 4 lần không gian mẫu. | Nếu để 0%: Mô hình học định hướng giả tạo; nếu để 100%: Chỉ lật mà không giữ ảnh gốc. |
+| **Góc quay** | `transforms.py:56` | **`[0, 90, 180, 270]`** | 4 góc quay trực giao bội số $90^\circ$ | Giữ nguyên vẹn 100% diện tích pixel, không sinh ra 4 góc đen viền như quay góc lẻ $30^\circ, 45^\circ$. | Nếu quay $45^\circ$: Mạng nơ-ron phải nhìn thấy các góc đen nhân tạo không có trong thực tế. |
+| **`subset_size`** | `constants.py:47` | **`25.000`** | Số ảnh lấy mẫu từ 100.000 ảnh nguồn | 2.777 ảnh/lớp là ngưỡng bão hòa hiệu năng, giúp chạy 13 thí nghiệm trong 3.5 giờ GPU Kaggle. | Nếu lấy 100.000: Hết quota GPU Kaggle (cần 14 giờ); nếu lấy 5.000: Mô hình bị underfit. |
+| **Tỷ lệ phân chia** | `splitter.py:45-48` | **`70% / 15% / 15%`** | Tỷ lệ Train / Validation / Test nội miền (ID) | Chuẩn mực vàng trong Machine Learning: tập Train đủ lớn để tối ưu hóa, Val và Test đủ để đo độ tin cậy. | Nếu Train 90%: Val và Test quá nhỏ, điểm số đo đạc bị dao động ngẫu nhiên lớn. |
+| **`seed` ngẫu nhiên** | `constants.py:48` | **`100`** | Hạt giống tạo số ngẫu nhiên toàn cục | Cố định phép chia tập dữ liệu và khởi tạo trọng số để bảo đảm 100% tính tái lập khoa học. | Nếu không cố định seed: Mỗi lần chạy cho ra một kết quả khác nhau, không so sánh công bằng được. |
+| **Số chiều ResNet FC** | `factory.py:48` | **`2048`** | Chiều vector đặc trưng sau tầng Adaptive Pooling | Kích thước kênh đầu ra của khối Bottleneck cuối cùng trong kiến trúc ResNet-50. | Đây là hằng số cố định của kiến trúc ResNet-50, không thể thay đổi nếu dùng pretrained. |
+| **Số chiều ConvNeXt/Phikon** | `factory.py:50`, `phikon.py:34` | **`768`** | Chiều vector đặc trưng của ConvNeXt-Tiny và ViT-Base | Chuẩn kích thước ẩn (Hidden Size) của thế hệ mạng thị giác mới. | Cố định theo kiến trúc mô hình đã công bố. |
+| **`epochs`** | `experiments.py:64` | **`8`** | Số chu kỳ duyệt qua toàn bộ tập dữ liệu huấn luyện | Tương ứng 139.960 lượt duyệt mẫu và 2.184 bước optimizer, điểm validation bão hòa ở epoch 6-7. | Nếu 30-50 epochs: Overfitting nặng trên Heidelberg, F1 OOD tại Aachen sẽ tụt dốc thảm hại. |
+| **`batch_size`** | `experiments.py:65` | **`64`** | Số ảnh nạp vào GPU trong một lần tính toán | Cân bằng hoàn hảo giữa việc tận dụng Tensor Core trên GPU 16GB mà không bị lỗi tràn bộ nhớ OOM với ViT. | Nếu 128: Lỗi tràn bộ nhớ CUDA Out-of-Memory trên Phikon; nếu 16: Tốc độ chạy chậm gấp 3 lần. |
+| **`lr` cho CNNs** | `experiments.py:66` | **`1e-3` (0.001)** | Tốc độ học cơ sở cho ResNet-50 và ConvNeXt-Tiny | Mức chuẩn mực cho bộ tối ưu AdamW khi fine-tune toàn bộ mạng tích chập. | Nếu $10^{-2}$: Gradient bùng nổ, loss biến thành NaN; nếu $10^{-5}$: Học quá chậm, 8 epoch không kịp hội tụ. |
+| **`lr` cho Phikon** | `trainer.py:83` | **`3e-4` (0.0003)** | Tốc độ học cơ sở cho Linear Probing Phikon | Bảo thủ hơn CNN vì chỉ học 1 lớp tuyến tính, giữ cho đầu dò hội tụ ổn định trên đặc trưng ViT. | Nếu $10^{-3}$: Cập nhật quá mạnh làm giật gradient, phá vỡ sự ổn định của đầu phân loại. |
+| **`weight_decay`** | `trainer.py:84` | **`0.05`** | Hệ số phân rã trọng số của bộ tối ưu AdamW | Phạt độ lớn trọng số L2 độc lập với gradient, kiểm soát chặt chẽ hiện tượng quá khớp (overfitting). | Nếu đặt 0.0: Trọng số phân kỳ phình to; nếu đặt 0.5: Mô hình bị bóp nghẹt, underfitting. |
+| **`label_smoothing`** | `trainer.py:87` | **`0.1` (10%)** | Hệ số làm mịn nhãn trong hàm mất mát Cross-Entropy | Phạt sự tự tin thái quá ($p \to 1.0$), làm mềm ranh giới quyết định, tăng khả năng tổng quát hóa ngoại viện. | Nếu để 0.0: Mô hình tự tin thái quá, khi gặp ảnh Aachen lệch màu sẽ phán đoán sai với xác suất cực đoan. |
+| **`eta_min`** | `trainer.py:86` | **`1e-5`** | Tốc độ học tối thiểu ở cuối chu kỳ Cosine Annealing | Giúp các bước cập nhật ở epoch cuối cực kỳ nhỏ, đưa mô hình hội tụ chính xác vào đáy thung lũng phẳng. | Nếu để $0.0$: Optimizer bị đóng băng hoàn toàn ở cuối epoch 8. |
 
 ---
 
